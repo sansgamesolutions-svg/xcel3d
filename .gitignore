@@ -1,0 +1,32 @@
+# Build output
+out/
+
+# External dependencies (managed outside the repo)
+External/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+
+# CMake generated
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+.cache/
+
+# MSVC artifacts
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+
+# Claude Code
+.claude/settings.local.json

@@ -1,0 +1,52 @@
+# Locate gdal
+# This module defines
+# OSG_LIBRARY
+# OSG_FOUND, if false, do not try to link to gdal 
+# OSG_INCLUDE_DIR, where to find the headers
+#
+# $OSG_DIR is an environment variable that would
+# correspond to the ./configure --prefix=$OSG_DIR
+#
+# Created by Robert Osfield. 
+SET (GLEW_VERSION 2.0.0)
+SET (GLEW_DIR ${VENDOR_PATH}/glew/glew-${GLEW_VERSION})
+
+MESSAGE(STATUS "GLEW root set to ${GLEW_DIR}")
+
+FIND_PATH(GLEW_INCLUDE_DIR GL/glew.h
+    ${GLEW_DIR}/include
+    NO_DEFAULT_PATH
+)
+MACRO(FIND_GLEW_LIBRARY MYLIBRARY MYLIBRARYNAME)
+
+    FIND_LIBRARY("${MYLIBRARY}_DEBUG"
+        NAMES "${MYLIBRARYNAME}${CMAKE_DEBUG_POSTFIX}"
+        PATHS
+        ${GLEW_DIR}/lib/wind
+        NO_DEFAULT_PATH
+    )
+    
+    FIND_LIBRARY(${MYLIBRARY}
+        NAMES "${MYLIBRARYNAME}${CMAKE_RELEASE_POSTFIX}"
+        PATHS
+        ${GLEW_DIR}/lib/win
+        NO_DEFAULT_PATH
+    )
+
+    IF( NOT ${MYLIBRARY}_DEBUG)
+        IF(MYLIBRARY)
+            SET(${MYLIBRARY}_DEBUG ${MYLIBRARY})
+         ENDIF(MYLIBRARY)
+    ENDIF( NOT ${MYLIBRARY}_DEBUG)           
+ENDMACRO(FIND_GLEW_LIBRARY LIBRARY LIBRARYNAME)
+
+SET( "GLEW_SHARED_PATH" ${GLEW_DIR}/bin/win )
+SET( "GLEW_SHARED_PATH_DEBUG" ${GLEW_DIR}/bin/wind)
+
+FIND_GLEW_LIBRARY(GLEW_LIBRARY glew32)
+FIND_GLEW_LIBRARY(GLEWLIB_LIBRARY libglew32)
+
+SET(GLEW_FOUND "NO")
+IF(GLEW_LIBRARY AND GLEW_INCLUDE_DIR)
+    SET(GLEW_FOUND "YES")
+ENDIF(GLEW_LIBRARY AND GLEW_INCLUDE_DIR)
