@@ -6,7 +6,7 @@
 
 namespace xcel {
 
-// ── IComponentPool ────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ IComponentPool Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Type-erased base so the Registry can store heterogeneous pools in one map.
 
 class IComponentPool {
@@ -21,13 +21,13 @@ public:
     virtual uint32_t EntityIndexAt(size_t denseSlot) const   = 0;
 };
 
-// ── SparseSetStorage<T> ───────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ SparseSetStorage<T> Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Default storage policy.
 //
 // Three parallel arrays maintain a dense packing:
-//   m_dense    — tightly packed component values (cache-friendly iteration)
-//   m_entities — dense[i] → entity slot index (for EntityIndexAt)
-//   m_sparse   — entity slot index → dense slot (UINT32_MAX = absent)
+//   m_dense    Ã¢â‚¬â€ tightly packed component values (cache-friendly iteration)
+//   m_entities Ã¢â‚¬â€ dense[i] Ã¢â€ â€™ entity slot index (for EntityIndexAt)
+//   m_sparse   Ã¢â‚¬â€ entity slot index Ã¢â€ â€™ dense slot (UINT32_MAX = absent)
 //
 // Add / Remove are O(1). Contains is O(1). Iteration is cache-friendly.
 // To swap in a different storage strategy: provide a class with the same
@@ -39,7 +39,8 @@ class SparseSetStorage {
 public:
     static constexpr uint32_t kAbsent = std::numeric_limits<uint32_t>::max();
 
-    T& Emplace(uint32_t entityIdx, T value) {
+    T& Emplace(uint32_t entityIdx, T value)
+    {
         if (entityIdx >= m_sparse.size())
             m_sparse.resize(static_cast<size_t>(entityIdx) + 1u, kAbsent);
 
@@ -49,7 +50,8 @@ public:
         return m_dense.back();
     }
 
-    void Erase(uint32_t entityIdx) {
+    void Erase(uint32_t entityIdx)
+    {
         if (entityIdx >= m_sparse.size() || m_sparse[entityIdx] == kAbsent)
             return;
 
@@ -66,19 +68,22 @@ public:
         m_sparse[entityIdx] = kAbsent;
     }
 
-    [[nodiscard]] T* TryGet(uint32_t entityIdx) noexcept {
+    [[nodiscard]] T* TryGet(uint32_t entityIdx) noexcept
+    {
         if (entityIdx >= m_sparse.size() || m_sparse[entityIdx] == kAbsent)
             return nullptr;
         return &m_dense[m_sparse[entityIdx]];
     }
 
-    [[nodiscard]] const T* TryGet(uint32_t entityIdx) const noexcept {
+    [[nodiscard]] const T* TryGet(uint32_t entityIdx) const noexcept
+    {
         if (entityIdx >= m_sparse.size() || m_sparse[entityIdx] == kAbsent)
             return nullptr;
         return &m_dense[m_sparse[entityIdx]];
     }
 
-    [[nodiscard]] bool     Contains(uint32_t entityIdx) const noexcept {
+    [[nodiscard]] bool     Contains(uint32_t entityIdx) const noexcept
+    {
         return entityIdx < m_sparse.size() && m_sparse[entityIdx] != kAbsent;
     }
 
@@ -87,11 +92,11 @@ public:
 
 private:
     std::vector<T>        m_dense;
-    std::vector<uint32_t> m_entities;   // dense → entity index
-    std::vector<uint32_t> m_sparse;     // entity index → dense slot
+    std::vector<uint32_t> m_entities;   // dense Ã¢â€ â€™ entity index
+    std::vector<uint32_t> m_sparse;     // entity index Ã¢â€ â€™ dense slot
 };
 
-// ── ComponentPool<T, Storage> ─────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ ComponentPool<T, Storage> Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Concrete typed pool that wraps a storage policy and implements IComponentPool.
 // Default storage is SparseSetStorage<T>; swap in another policy at the template
 // argument without changing any other code.
@@ -99,31 +104,38 @@ private:
 template<typename T, template<typename> typename Storage = SparseSetStorage>
 class ComponentPool : public IComponentPool {
 public:
-    T& Emplace(uint32_t entityIdx, T value) {
+    T& Emplace(uint32_t entityIdx, T value)
+    {
         return m_storage.Emplace(entityIdx, std::move(value));
     }
 
-    void Remove(uint32_t entityIdx) override {
+    void Remove(uint32_t entityIdx) override
+    {
         m_storage.Erase(entityIdx);
     }
 
-    [[nodiscard]] bool Contains(uint32_t entityIdx) const override {
+    [[nodiscard]] bool Contains(uint32_t entityIdx) const override
+    {
         return m_storage.Contains(entityIdx);
     }
 
-    [[nodiscard]] size_t Size() const override {
+    [[nodiscard]] size_t Size() const override
+    {
         return m_storage.Size();
     }
 
-    [[nodiscard]] uint32_t EntityIndexAt(size_t denseSlot) const override {
+    [[nodiscard]] uint32_t EntityIndexAt(size_t denseSlot) const override
+    {
         return m_storage.EntityAt(denseSlot);
     }
 
-    [[nodiscard]] T* TryGet(uint32_t entityIdx) noexcept {
+    [[nodiscard]] T* TryGet(uint32_t entityIdx) noexcept
+    {
         return m_storage.TryGet(entityIdx);
     }
 
-    [[nodiscard]] const T* TryGet(uint32_t entityIdx) const noexcept {
+    [[nodiscard]] const T* TryGet(uint32_t entityIdx) const noexcept
+    {
         return m_storage.TryGet(entityIdx);
     }
 

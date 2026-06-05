@@ -1,9 +1,10 @@
 #include "Viewer/Application.h"
-#include "Graphics/StaticMesh.h"
-#include "Graphics/CoordTable.h"
-#include "Graphics/ScalarTable.h"
-#include "Graphics/PrimitiveSet.h"
-#include "Graphics/Camera.h"
+#include "Platforms/GlfwWindowWidget.h"
+#include "Renderer/MeshDrawable.h"
+#include "Kernel/CoordTable.h"
+#include "Kernel/ScalarTable.h"
+#include "Kernel/PrimitiveSet.h"
+#include "Renderer/Camera.h"
 #include <glm/glm.hpp>
 #include <memory>
 #include <stdexcept>
@@ -12,9 +13,10 @@
 // Builds a 2x2x2 grid of hexahedral FEM elements (8 elements, 27 nodes).
 // The scalar field is the distance of each element's centroid from the grid center,
 // demonstrating blue-to-red colormap mapping.
-static std::shared_ptr<xcel::StaticMesh> buildDemoMesh() {
+static std::shared_ptr<xcel::MeshDrawable> buildDemoMesh()
+{
     auto coords  = std::make_shared<xcel::CoordTable>();
-    auto scalars = std::make_shared<xcel::ScalarTable>();
+    auto scalars = std::make_shared<xcel::ElementScalarTable>();
     auto hexSet  = std::make_shared<xcel::HexPrimitiveSet>();
 
     // 27 nodes on a 3x3x3 lattice with 1.0 spacing
@@ -34,7 +36,7 @@ static std::shared_ptr<xcel::StaticMesh> buildDemoMesh() {
     for (int j = 0; j < 2; ++j)
     for (int i = 0; i < 2; ++i) {
         // VTK hex node ordering
-        xcel::HexPrimitiveSet::HexElement e = {
+        xcel::HexPrimitiveSet::value_type e = {
             idx(i,   j,   k  ),
             idx(i+1, j,   k  ),
             idx(i+1, j+1, k  ),
@@ -50,16 +52,18 @@ static std::shared_ptr<xcel::StaticMesh> buildDemoMesh() {
         scalars->AddScalar(glm::length(centroid - center));
     }
 
-    auto mesh = std::make_shared<xcel::StaticMesh>();
+    auto mesh = std::make_shared<xcel::MeshDrawable>();
     mesh->SetCoords(coords);
     mesh->SetScalars(scalars);
     mesh->AddPrimitiveSet(hexSet);
     return mesh;
 }
 
-int main() {
+int main()
+{
     try {
-        xcel::Application app(1280, 720, "Xcel3D - FEM Hex Viewer");
+        auto widget = std::make_unique<xcel::GlfwWindowWidget>(1280, 720, "Xcel3D - FEM Hex Viewer");
+        xcel::Application app(std::move(widget));
 
         auto mesh = buildDemoMesh();
         app.AddMesh("demo", mesh);

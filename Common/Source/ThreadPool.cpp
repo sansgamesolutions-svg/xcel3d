@@ -53,7 +53,8 @@ ThreadPool::ThreadPool(size_t threadCount)
     }
 }
 
-ThreadPool::~ThreadPool() {
+ThreadPool::~ThreadPool()
+{
     {
         std::lock_guard lock(m_impl->mutex);
         m_impl->stopping = true;
@@ -63,7 +64,8 @@ ThreadPool::~ThreadPool() {
         w.join();
 }
 
-void ThreadPool::Enqueue(std::function<void()> task) {
+void ThreadPool::Enqueue(std::function<void()> task)
+{
     {
         std::lock_guard lock(m_impl->mutex);
         ++m_impl->pendingTasks;
@@ -72,14 +74,16 @@ void ThreadPool::Enqueue(std::function<void()> task) {
     m_impl->workCv.notify_one();
 }
 
-void ThreadPool::WaitAll() {
+void ThreadPool::WaitAll()
+{
     std::unique_lock lock(m_impl->mutex);
     m_impl->completeCv.wait(lock, [this] {
         return m_impl->pendingTasks == 0;
     });
 }
 
-size_t ThreadPool::ThreadCount() const {
+size_t ThreadPool::ThreadCount() const
+{
     return m_impl->workers.size();
 }
 

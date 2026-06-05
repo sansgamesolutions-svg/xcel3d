@@ -8,9 +8,9 @@ target_include_directories(XcelViewer PRIVATE
 )
 
 target_link_libraries(XcelViewer PRIVATE
-    XcelGraphics
+    XcelRenderer
+    XcelPlatforms
     XcelCommon
-    ${GLFW_LIBRARY}
 )
 
 if(WIN32)

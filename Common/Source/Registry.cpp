@@ -5,7 +5,7 @@
 
 namespace xcel {
 
-// ── Impl ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Impl â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 struct Registry::Impl {
     struct Slot {
@@ -21,14 +21,15 @@ struct Registry::Impl {
     size_t                                                     aliveCount = 0u;
 };
 
-// ── Construction ──────────────────────────────────────────────────────────────
+// â”€â”€ Construction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 Registry::Registry()  : m_impl(std::make_unique<Impl>()) {}
 Registry::~Registry() = default;
 
-// ── Entity lifecycle ──────────────────────────────────────────────────────────
+// â”€â”€ Entity lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-Entity Registry::Create() {
+Entity Registry::Create()
+{
     uint32_t index;
     uint32_t generation;
 
@@ -54,7 +55,8 @@ Entity Registry::Create() {
     return MakeEntity(index, generation);
 }
 
-void Registry::Destroy(Entity e) {
+void Registry::Destroy(Entity e)
+{
     if (!IsAlive(e)) return;
 
     uint32_t idx = e.Index();
@@ -68,7 +70,8 @@ void Registry::Destroy(Entity e) {
     --m_impl->aliveCount;
 }
 
-bool Registry::IsAlive(Entity e) const {
+bool Registry::IsAlive(Entity e) const
+{
     if (!e.IsValid()) return false;
     uint32_t idx = e.Index();
     if (idx >= m_impl->slots.size()) return false;
@@ -78,13 +81,14 @@ bool Registry::IsAlive(Entity e) const {
 
 size_t Registry::AliveCount() const { return m_impl->aliveCount; }
 
-Entity Registry::EntityFromIndex(uint32_t index) const {
+Entity Registry::EntityFromIndex(uint32_t index) const
+{
     if (index >= m_impl->slots.size()) return Entity{};
     const auto& slot = m_impl->slots[index];
     return slot.alive ? MakeEntity(index, slot.generation) : Entity{};
 }
 
-// ── Non-template pool bridge ──────────────────────────────────────────────────
+// â”€â”€ Non-template pool bridge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 IComponentPool* Registry::GetOrCreatePool(
     size_t typeId,
@@ -98,7 +102,8 @@ IComponentPool* Registry::GetOrCreatePool(
     return it->second.get();
 }
 
-IComponentPool* Registry::FindPool(size_t typeId) const {
+IComponentPool* Registry::FindPool(size_t typeId) const
+{
     auto it = m_impl->pools.find(typeId);
     return it != m_impl->pools.end() ? it->second.get() : nullptr;
 }

@@ -19,5 +19,7 @@ else()
 endif()
 
 add_subdirectory(Common)
-add_subdirectory(Graphics)
+add_subdirectory(Platforms)
+add_subdirectory(Kernel)
+add_subdirectory(Renderer)
 add_subdirectory(Viewer)

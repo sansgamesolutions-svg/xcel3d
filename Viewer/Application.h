@@ -1,5 +1,5 @@
 #pragma once
-#include "Graphics/WindowContext.h"
+#include "Renderer/WindowContext.h"
 
 namespace xcel {
 using Application = WindowContext;
