@@ -1,0 +1,68 @@
+#version 450
+
+layout(local_size_x = 64) in;
+
+struct CullableObject {
+    vec4     aabbMin;       // xyz = min corner
+    vec4     aabbMax;       // xyz = max corner
+    uint     indexCount;
+    uint     instanceCount;
+    uint     _pad0;
+    uint     _pad1;
+    uint     _pad2;
+    uint     _pad3[3];
+};
+
+struct DrawIndexedIndirectCommand {
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int  vertexOffset;
+    uint firstInstance;
+};
+
+layout(set = 0, binding = 0) readonly  buffer ObjectBuffer  { CullableObject objects[]; };
+layout(set = 0, binding = 1) writeonly buffer DrawCmdBuffer { DrawIndexedIndirectCommand cmds[]; };
+
+layout(push_constant) uniform CullPush {
+    vec4  frustumPlanes[6];
+    uint  objectCount;
+} push;
+
+bool testAabb(vec3 minP, vec3 maxP) {
+    for (int i = 0; i < 6; ++i) {
+        vec3 n  = push.frustumPlanes[i].xyz;
+        float d = push.frustumPlanes[i].w;
+        // Most positive vertex along plane normal
+        vec3 px = vec3(
+            n.x >= 0.0 ? maxP.x : minP.x,
+            n.y >= 0.0 ? maxP.y : minP.y,
+            n.z >= 0.0 ? maxP.z : minP.z
+        );
+        if (dot(n, px) + d < 0.0) return false;
+    }
+    return true;
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= push.objectCount) return;
+
+    CullableObject obj = objects[id];
+
+    DrawIndexedIndirectCommand cmd;
+    if (testAabb(obj.aabbMin.xyz, obj.aabbMax.xyz)) {
+        cmd.indexCount    = obj.indexCount;
+        cmd.instanceCount = obj.instanceCount;
+        cmd.firstIndex    = 0;
+        cmd.vertexOffset  = 0;
+        cmd.firstInstance = 0;
+    } else {
+        cmd.indexCount    = 0;
+        cmd.instanceCount = 0;
+        cmd.firstIndex    = 0;
+        cmd.vertexOffset  = 0;
+        cmd.firstInstance = 0;
+    }
+    cmds[id] = cmd;
+}

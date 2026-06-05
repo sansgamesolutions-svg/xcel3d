@@ -1,9 +1,12 @@
 #include "Renderer/WindowContext.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/RenderPass.h"
-#include "Renderer/Pipeline.h"
+#include "Renderer/RenderGraph.h"
+#include "Renderer/RenderGraphBuilder.h"
+#include "Renderer/ForwardRenderPass.h"
+#include "Renderer/FrustumCullPass.h"
+#include "Renderer/OcclusionCullPass.h"
 #include "Renderer/DescriptorManager.h"
-#include "Renderer/CommandRecorder.h"
 #include "Renderer/Camera.h"
 #include "Renderer/Drawable.h"
 #include "Renderer/GpuBuffer.h"
@@ -22,6 +25,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <set>
 #include <string>
 #include <vector>
@@ -58,6 +62,22 @@ static void DestroyDebugMessenger(
     if (fn) fn(instance, messenger, pAllocator);
 }
 
+// Compute the AABB of a CoordTable in model space.
+static BoundingBoxComponent ComputeAABB(const CoordTable& coords)
+{
+    constexpr float kInf = std::numeric_limits<float>::max();
+    BoundingBoxComponent bb;
+    bb.min = glm::vec3( kInf);
+    bb.max = glm::vec3(-kInf);
+
+    for (size_t i = 0; i < coords.Size(); ++i) {
+        const glm::vec3& p = coords[i];
+        bb.min = glm::min(bb.min, p);
+        bb.max = glm::max(bb.max, p);
+    }
+    if (bb.min.x > bb.max.x) { bb.min = glm::vec3(0.f); bb.max = glm::vec3(0.f); }
+    return bb;
+}
 
 struct WindowContext::Impl {
     // Windowing backend (platform-neutral)
@@ -76,14 +96,21 @@ struct WindowContext::Impl {
     // All suitable devices, ranked best first
     std::vector<std::unique_ptr<DeviceContext>> devices;
 
-    // Rendering objects
-    RenderPass        renderPass;
+    // Core rendering objects
+    RenderPass        renderPass;     // owns the VkRenderPass for the swapchain
     Swapchain         swapchain;
     DescriptorManager descriptors;
-    Pipeline          pipeline;
-    CommandRecorder   recorder;
+    RenderGraph       renderGraph;
     Camera            camera;
     ThreadPool        pool;
+
+    // Pass configuration (set before Run())
+    PassOptions passOptions{};
+
+    // Pointers into renderGraph's pass list (non-owning, valid after InitVulkan)
+    ForwardRenderPass*   forwardPass   = nullptr;
+    FrustumCullPass*     frustumPass   = nullptr;
+    OcclusionCullPass*   occlusionPass = nullptr;
 
     // ECS world
     flecs::world world;
@@ -97,8 +124,7 @@ struct WindowContext::Impl {
     // Shared 1-element identity buffer bound at binding 1 for non-instanced draw calls.
     GpuBuffer defaultInstanceBuffer;
 
-    std::string vertSpvPath = "shaders/mesh.vert.spv";
-    std::string fragSpvPath = "shaders/mesh.frag.spv";
+    std::string shaderDir = "shaders/";
 
     static constexpr int MAX_FRAMES = DescriptorManager::MAX_FRAMES;
     VkSemaphore imageAvailableSem[MAX_FRAMES] = {};
@@ -113,7 +139,6 @@ WindowContext::WindowContext(std::unique_ptr<IWindowWidget> widget)
 {
     m_impl->widget = std::move(widget);
 
-    // Register input callbacks as lambdas â€” no platform types cross this boundary
     m_impl->widget->SetFramebufferResizeCallback([this](int, int) {
         m_impl->framebufferResized = true;
     });
@@ -191,6 +216,11 @@ Entity WindowContext::AddInstance(Entity templateEntity, const glm::mat4& transf
 
 Camera& WindowContext::GetCamera() { return m_impl->camera; }
 
+void WindowContext::SetPassOptions(const PassOptions& opts)
+{
+    m_impl->passOptions = opts;
+}
+
 void WindowContext::Run()
 {
     InitVulkan();
@@ -215,7 +245,7 @@ DeviceContext* WindowContext::FindDevice(std::function<bool(const DeviceContext&
 VkInstance   WindowContext::Instance() const { return m_impl->instance; }
 VkSurfaceKHR WindowContext::Surface()  const { return m_impl->surface;  }
 
-// â”€â”€ Private â€” Vulkan instance setup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Private ─── Vulkan instance setup ───────────────────────────────────────
 
 VKAPI_ATTR VkBool32 VKAPI_CALL WindowContext::DebugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT    severity,
@@ -368,14 +398,24 @@ void WindowContext::InitVulkan()
         if (f.format == VK_FORMAT_B8G8R8A8_SRGB) { colorFmt = f.format; break; }
 
     m_impl->renderPass.Create(dev.Device(), colorFmt, VK_FORMAT_D32_SFLOAT);
-    m_impl->swapchain.Create(dev, m_impl->surface, *m_impl->widget, m_impl->renderPass.GetHandle());
+    m_impl->swapchain.Create(dev, m_impl->surface, *m_impl->widget,
+                              m_impl->renderPass.GetHandle());
     m_impl->descriptors.Create(dev);
-    m_impl->pipeline.Create(dev.Device(),
-                            m_impl->renderPass.GetHandle(),
-                            m_impl->descriptors.Layout(),
-                            m_impl->swapchain.Extent(),
-                            m_impl->vertSpvPath, m_impl->fragSpvPath);
-    m_impl->recorder.Create(dev);
+
+    // Build the render graph from pass options
+    RenderGraphBuilder builder;
+    builder.SetOptions(m_impl->passOptions)
+           .SetSwapchain(m_impl->swapchain)
+           .SetDescriptors(m_impl->descriptors)
+           .SetShaderDir(m_impl->shaderDir)
+           .SetRenderPassHandle(m_impl->renderPass.GetHandle());
+    m_impl->renderGraph = builder.Build(dev);
+
+    // Cache typed pass pointers for per-frame data delivery.
+    m_impl->forwardPass   = m_impl->renderGraph.FindPass<ForwardRenderPass>();
+    m_impl->frustumPass   = m_impl->renderGraph.FindPass<FrustumCullPass>();
+    m_impl->occlusionPass = m_impl->renderGraph.FindPass<OcclusionCullPass>();
+
     BuildMeshes();
     CreateSyncObjects();
 }
@@ -385,7 +425,6 @@ void WindowContext::BuildMeshes()
     PaletteColor   colormap;
     DeviceContext& dev = GetDevice(0);
 
-    // Create the shared identity instance buffer for non-instanced draw calls.
     glm::mat4 identity{1.f};
     m_impl->defaultInstanceBuffer.Create(
         dev.Device(), dev.PhysicalDevice(), sizeof(glm::mat4),
@@ -393,15 +432,12 @@ void WindowContext::BuildMeshes()
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     m_impl->defaultInstanceBuffer.UploadViaStaging(dev, &identity, sizeof(glm::mat4));
 
-    // Legacy path: pre-built Drawables registered via AddMesh(name, Drawable).
     m_impl->world.each([&](MeshComponent& mc) {
         mc.mesh->Build(dev, colormap, &m_impl->pool);
     });
 
-    // Batched path: assign mesh entities to pages and upload.
     m_impl->batchingSystem.BuildAll(m_impl->world, dev, &m_impl->pool);
 
-    // Instanced path: collect visible instance transforms per template and upload.
     m_impl->world.each([&](flecs::entity templateEnt, MeshComponent& mc) {
         auto* id = dynamic_cast<InstanceDrawable*>(mc.mesh.get());
         if (!id || id->IndexCount() == 0) return;
@@ -414,6 +450,33 @@ void WindowContext::BuildMeshes()
                 transforms.push_back(tc.matrix);
         });
         id->UpdateInstances(dev, transforms);
+    });
+
+    // Compute and store AABBs on page entities (produced by BatchingSystem).
+    m_impl->world.each([&](flecs::entity e, MeshComponent& mc, PageMetaComponent&) {
+        // Page entity: find all mesh entities belonging to this page and union their AABBs.
+        BoundingBoxComponent bb;
+        bb.min = glm::vec3( std::numeric_limits<float>::max());
+        bb.max = glm::vec3(-std::numeric_limits<float>::max());
+
+        m_impl->world.each([&](flecs::entity meshEnt, const CoordTableComponent& cc) {
+            if (!meshEnt.has<BelongsToPage>(e)) return;
+            if (!cc.coords) return;
+            for (size_t i = 0; i < cc.coords->Size(); ++i) {
+                bb.min = glm::min(bb.min, (*cc.coords)[i]);
+                bb.max = glm::max(bb.max, (*cc.coords)[i]);
+            }
+        });
+        if (bb.min.x <= bb.max.x) e.set<BoundingBoxComponent>(bb);
+    });
+
+    // Also compute AABB for non-page mesh entities (legacy / instanced path).
+    m_impl->world.each([&](flecs::entity e, MeshComponent& mc,
+                            const CoordTableComponent& cc) {
+        if (e.has<PageMetaComponent>()) return; // already handled above
+        if (!cc.coords) return;
+        auto bb = ComputeAABB(*cc.coords);
+        e.set<BoundingBoxComponent>(bb);
     });
 }
 
@@ -470,6 +533,58 @@ void WindowContext::UpdateUBO(uint32_t frameIndex)
     m_impl->descriptors.UpdateUBO(frameIndex, ubo);
 }
 
+// Build the per-frame draw call list from visible ECS entities.
+static std::vector<DrawCall> CollectDrawCalls(flecs::world& world,
+                                               const GpuBuffer& defaultInstanceBuffer)
+{
+    std::vector<DrawCall> drawCalls;
+    world.each([&](MeshComponent& mc, VisibilityComponent& vc) {
+        if (!vc.visible || mc.mesh->IndexCount() == 0) return;
+        const GpuBuffer* instBuf   = mc.mesh->InstanceBuffer();
+        uint32_t         instCount = mc.mesh->InstanceCount();
+        if (!instBuf) {
+            instBuf   = &defaultInstanceBuffer;
+            instCount = 1;
+        }
+        drawCalls.push_back({
+            &mc.mesh->VertexBuffer(), &mc.mesh->IndexBuffer(),
+            mc.mesh->IndexCount(), instBuf, instCount
+        });
+    });
+    return drawCalls;
+}
+
+// Build the per-object culling data in the same order as draw calls.
+static std::vector<CullableObject> CollectCullableObjects(
+    flecs::world& world,
+    const std::vector<DrawCall>& drawCalls)
+{
+    std::vector<CullableObject> objects;
+    objects.reserve(drawCalls.size());
+
+    world.each([&](MeshComponent& mc, VisibilityComponent& vc,
+                   const BoundingBoxComponent& bb) {
+        if (!vc.visible || mc.mesh->IndexCount() == 0) return;
+        CullableObject obj{};
+        obj.aabbMin      = glm::vec4(bb.min, 0.f);
+        obj.aabbMax      = glm::vec4(bb.max, 0.f);
+        obj.indexCount   = mc.mesh->IndexCount();
+        obj.instanceCount = mc.mesh->InstanceCount() > 0 ? mc.mesh->InstanceCount() : 1u;
+        objects.push_back(obj);
+    });
+
+    // Pad to match draw call count (entities without BoundingBoxComponent get trivial box).
+    while (objects.size() < drawCalls.size()) {
+        CullableObject obj{};
+        obj.aabbMin       = glm::vec4(-1e9f);
+        obj.aabbMax       = glm::vec4( 1e9f);
+        obj.indexCount    = drawCalls[objects.size()].indexCount;
+        obj.instanceCount = drawCalls[objects.size()].instanceCount;
+        objects.push_back(obj);
+    }
+    return objects;
+}
+
 void WindowContext::DrawFrame()
 {
     VkDevice device = GetDevice(0).Device();
@@ -491,35 +606,36 @@ void WindowContext::DrawFrame()
     vkResetFences(device, 1, &m_impl->inFlightFence[m_impl->currentFrame]);
 
     UpdateUBO(m_impl->currentFrame);
-
-    // Rebuild any pages dirtied by visibility changes, now that the previous
-    // frame's GPU work is complete (guaranteed by vkWaitForFences above).
     m_impl->batchingSystem.FlushRebuild(&m_impl->pool);
 
-    std::vector<DrawCall> drawCalls;
-    m_impl->world.each([&](MeshComponent& mc, VisibilityComponent& vc) {
-        if (!vc.visible || mc.mesh->IndexCount() == 0) return;
-        const GpuBuffer* instBuf   = mc.mesh->InstanceBuffer();
-        uint32_t         instCount = mc.mesh->InstanceCount();
-        if (!instBuf) {
-            instBuf   = &m_impl->defaultInstanceBuffer;
-            instCount = 1;
-        }
-        drawCalls.push_back({
-            &mc.mesh->VertexBuffer(), &mc.mesh->IndexBuffer(),
-            mc.mesh->IndexCount(), instBuf, instCount
-        });
-    });
+    auto drawCalls = CollectDrawCalls(m_impl->world, m_impl->defaultInstanceBuffer);
     if (drawCalls.empty()) return;
 
-    m_impl->recorder.Record(
+    // Deliver per-frame data to each pass.
+    if (m_impl->forwardPass)
+        m_impl->forwardPass->SetDrawCalls(drawCalls);
+
+    if (m_impl->frustumPass || m_impl->occlusionPass) {
+        float aspect   = (float)m_impl->swapchain.Extent().width
+                       / (float)m_impl->swapchain.Extent().height;
+        glm::mat4 proj     = m_impl->camera.ProjMatrix(aspect);
+        glm::mat4 viewProj = proj * m_impl->camera.ViewMatrix();
+        auto objects       = CollectCullableObjects(m_impl->world, drawCalls);
+
+        if (m_impl->frustumPass)
+            m_impl->frustumPass->SetObjects(GetDevice(0), objects, viewProj);
+
+        if (m_impl->occlusionPass) {
+            m_impl->occlusionPass->SetDrawCalls(drawCalls);
+            m_impl->occlusionPass->SetObjects(GetDevice(0), objects, viewProj, proj);
+        }
+    }
+
+    VkCommandBuffer cmd = m_impl->renderGraph.Execute(
         m_impl->currentFrame,
         m_impl->swapchain.Framebuffer(imageIndex),
         m_impl->swapchain.Extent(),
-        m_impl->renderPass.GetHandle(),
-        m_impl->pipeline,
-        m_impl->descriptors,
-        drawCalls);
+        m_impl->descriptors.DescriptorSet(m_impl->currentFrame));
 
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submitInfo{};
@@ -528,7 +644,7 @@ void WindowContext::DrawFrame()
     submitInfo.pWaitSemaphores      = &m_impl->imageAvailableSem[m_impl->currentFrame];
     submitInfo.pWaitDstStageMask    = &waitStage;
     submitInfo.commandBufferCount   = 1;
-    submitInfo.pCommandBuffers      = &m_impl->recorder.CommandBuffer(m_impl->currentFrame);
+    submitInfo.pCommandBuffers      = &cmd;
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores    = &m_impl->renderFinishedSem[m_impl->currentFrame];
 
@@ -557,13 +673,15 @@ void WindowContext::DrawFrame()
 void WindowContext::HandleResize()
 {
     DeviceContext& dev = GetDevice(0);
-    m_impl->swapchain.Recreate(dev, m_impl->surface, *m_impl->widget, m_impl->renderPass.GetHandle());
-    m_impl->pipeline.Destroy(dev.Device());
-    m_impl->pipeline.Create(dev.Device(),
-                            m_impl->renderPass.GetHandle(),
-                            m_impl->descriptors.Layout(),
-                            m_impl->swapchain.Extent(),
-                            m_impl->vertSpvPath, m_impl->fragSpvPath);
+    m_impl->swapchain.Recreate(dev, m_impl->surface, *m_impl->widget,
+                                m_impl->renderPass.GetHandle());
+    m_impl->renderGraph.Rebuild(dev, m_impl->swapchain.Extent(),
+                                 m_impl->renderPass.GetHandle());
+
+    // Re-cache typed pass pointers (Rebuild may recreate pipelines but not pass objects).
+    m_impl->forwardPass   = m_impl->renderGraph.FindPass<ForwardRenderPass>();
+    m_impl->frustumPass   = m_impl->renderGraph.FindPass<FrustumCullPass>();
+    m_impl->occlusionPass = m_impl->renderGraph.FindPass<OcclusionCullPass>();
 }
 
 void WindowContext::Cleanup()
@@ -585,11 +703,12 @@ void WindowContext::Cleanup()
             vkDestroyFence    (device, m_impl->inFlightFence[i],     nullptr);
         }
 
-        m_impl->recorder.Destroy(device);
-        m_impl->pipeline.Destroy(device);
+        m_impl->renderGraph.Destroy(device);
         m_impl->descriptors.Destroy(device);
         m_impl->swapchain.Destroy(device);
         m_impl->renderPass.Destroy(device);
+
+        m_impl->defaultInstanceBuffer.Destroy(device);
 
         m_impl->world.each([&](MeshComponent& mc) {
             mc.mesh->Destroy(device);
@@ -611,7 +730,6 @@ void WindowContext::Cleanup()
         m_impl->instance = VK_NULL_HANDLE;
     }
 
-    // Widget destructor calls glfwDestroyWindow + glfwTerminate
     m_impl->widget.reset();
 }
 

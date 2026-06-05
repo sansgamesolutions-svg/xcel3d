@@ -56,6 +56,14 @@ struct PrimitiveSetsComponent {
     std::vector<std::shared_ptr<PrimitiveSet>> sets;
 };
 
+// Axis-aligned bounding box in model space.
+// Computed from CoordTableComponent during WindowContext::BuildMeshes()
+// and consumed by FrustumCullPass / OcclusionCullPass.
+struct BoundingBoxComponent {
+    glm::vec3 min{0.f};
+    glm::vec3 max{0.f};
+};
+
 // ── Page metadata ───────────────────────────────────────────────────────────
 
 // Metadata attached to page entities created by BatchingSystem.

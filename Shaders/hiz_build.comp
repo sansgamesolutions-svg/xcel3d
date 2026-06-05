@@ -1,0 +1,33 @@
+#version 450
+
+// Builds one mip level of the Hi-Z depth pyramid.
+// Reads from srcMip (the previous level), writes to dstMip (this level).
+// Each invocation handles one 2x2 block; stores the MAXIMUM depth
+// (the farthest value — conservative occlusion).
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform sampler2D srcMip;
+layout(set = 0, binding = 1, r32f) writeonly uniform image2D dstMip;
+
+layout(push_constant) uniform HiZPush {
+    uvec2 srcSize;
+} push;
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 dstSize = imageSize(dstMip);
+    if (coord.x >= dstSize.x || coord.y >= dstSize.y) return;
+
+    vec2 uv = (vec2(coord) + 0.5) / vec2(dstSize);
+    vec2 texelSize = 1.0 / vec2(push.srcSize);
+
+    float d00 = texture(srcMip, uv + vec2(-0.5, -0.5) * texelSize).r;
+    float d10 = texture(srcMip, uv + vec2( 0.5, -0.5) * texelSize).r;
+    float d01 = texture(srcMip, uv + vec2(-0.5,  0.5) * texelSize).r;
+    float d11 = texture(srcMip, uv + vec2( 0.5,  0.5) * texelSize).r;
+
+    // Store farthest depth (conservative for occlusion)
+    float maxDepth = max(max(d00, d10), max(d01, d11));
+    imageStore(dstMip, coord, vec4(maxDepth, 0.0, 0.0, 0.0));
+}
