@@ -36,8 +36,6 @@ static const std::vector<const char*> kDeviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
 
-// â”€â”€ Debug messenger helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
 static VkResult CreateDebugMessenger(
     VkInstance                                instance,
     const VkDebugUtilsMessengerCreateInfoEXT* pInfo,
@@ -159,6 +157,7 @@ Entity WindowContext::AddMesh(const std::string&                         name,
         .set<PrimitiveSetsComponent>({std::move(primSets)})
         .set<TransformComponent>({})
         .set<VisibilityComponent>({});
+
     m_impl->batchingSystem.Register(e);
     return e;
 }
@@ -351,8 +350,6 @@ void WindowContext::EnumerateDevices(bool enableValidation)
     }
 }
 
-// â”€â”€ Private â€” Vulkan init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
 void WindowContext::InitVulkan()
 {
     m_impl->validationEnabled = true;
@@ -438,8 +435,6 @@ void WindowContext::CreateSyncObjects()
             throw std::runtime_error("WindowContext: failed to create sync objects");
     }
 }
-
-// â”€â”€ Private â€” frame loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 void WindowContext::MainLoop()
 {

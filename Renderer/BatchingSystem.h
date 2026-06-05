@@ -25,8 +25,8 @@ class ThreadPool;
 //   - Pages have a configurable byte budget (default 256 MB).
 //   - A mesh with N distinct PrimitiveTypes belongs to N pages.
 //
-// Each mesh entity must carry PrimitiveSetsComponent and three typed relationships:
-//   (UsesCoords, coordEntity), (UsesScalars, scalarEntity), (UsesColorTable, colorEntity).
+// Each mesh entity must carry CoordTableComponent, ScalarTableComponent,
+// ColorTableComponent, and PrimitiveSetsComponent directly as components.
 class BatchingSystem {
 public:
     explicit BatchingSystem(uint64_t pageCapacityBytes = 256ULL * 1024 * 1024);
