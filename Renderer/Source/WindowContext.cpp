@@ -6,11 +6,16 @@
 #include "Renderer/CommandRecorder.h"
 #include "Renderer/Camera.h"
 #include "Renderer/Drawable.h"
-#include "Renderer/MeshDrawable.h"
+#include "Renderer/GpuBuffer.h"
+#include "Renderer/InstanceDrawable.h"
+#include "Renderer/BatchingSystem.h"
+#include "Kernel/CoordTable.h"
+#include "Kernel/ScalarTable.h"
 #include "Kernel/ColorTable.h"
-#include "Graphics/Components.h"
-#include "Common/Registry.h"
+#include "Kernel/PrimitiveSet.h"
+#include "Renderer/Component.h"
 #include "Common/ISystem.h"
+#include <flecs.h>
 #include "Common/ThreadPool.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <stdexcept>
@@ -55,7 +60,6 @@ static void DestroyDebugMessenger(
     if (fn) fn(instance, messenger, pAllocator);
 }
 
-// â”€â”€ Impl â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 struct WindowContext::Impl {
     // Windowing backend (platform-neutral)
@@ -83,11 +87,17 @@ struct WindowContext::Impl {
     Camera            camera;
     ThreadPool        pool;
 
-    // ECS registry
-    Registry registry;
+    // ECS world
+    flecs::world world;
 
     // Systems run once per frame before the draw call, in registration order
     std::vector<std::unique_ptr<ISystem>> systems;
+
+    // Packs mesh entities registered via AddMesh(name, Mesh) into batched GPU pages.
+    BatchingSystem batchingSystem;
+
+    // Shared 1-element identity buffer bound at binding 1 for non-instanced draw calls.
+    GpuBuffer defaultInstanceBuffer;
 
     std::string vertSpvPath = "shaders/mesh.vert.spv";
     std::string fragSpvPath = "shaders/mesh.frag.spv";
@@ -99,7 +109,6 @@ struct WindowContext::Impl {
     uint32_t    currentFrame = 0;
 };
 
-// â”€â”€ Construction / destruction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 WindowContext::WindowContext(std::unique_ptr<IWindowWidget> widget)
     : m_impl(std::make_unique<Impl>())
@@ -136,16 +145,49 @@ WindowContext::~WindowContext()
     Cleanup();
 }
 
-// â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-Entity WindowContext::AddMesh(const std::string& name, std::shared_ptr<Drawable> mesh)
+Entity WindowContext::AddMesh(const std::string&                         name,
+                               std::shared_ptr<CoordTable>                coords,
+                               std::shared_ptr<ScalarTable>               scalars,
+                               std::shared_ptr<ColorTable>                colorTable,
+                               std::vector<std::shared_ptr<PrimitiveSet>> primSets)
 {
-    Entity e = m_impl->registry.Create();
-    m_impl->registry.Add<NameComponent>(e, name);
-    m_impl->registry.Add<MeshComponent>(e, std::move(mesh));
-    m_impl->registry.Add<TransformComponent>(e);
-    m_impl->registry.Add<VisibilityComponent>(e);
+    flecs::entity e = m_impl->world.entity()
+        .set<NameComponent>({name})
+        .set<CoordTableComponent>({std::move(coords)})
+        .set<ScalarTableComponent>({std::move(scalars)})
+        .set<ColorTableComponent>({std::move(colorTable)})
+        .set<PrimitiveSetsComponent>({std::move(primSets)})
+        .set<TransformComponent>({})
+        .set<VisibilityComponent>({});
+    m_impl->batchingSystem.Register(e);
     return e;
+}
+
+Entity WindowContext::AddInstanceMesh(
+    const std::string&                         name,
+    std::shared_ptr<CoordTable>                coords,
+    std::shared_ptr<ScalarTable>               scalars,
+    std::shared_ptr<ColorTable>                colorTable,
+    std::vector<std::shared_ptr<PrimitiveSet>> primSets)
+{
+    flecs::entity e = m_impl->world.entity()
+        .set<NameComponent>({name})
+        .set<CoordTableComponent>({std::move(coords)})
+        .set<ScalarTableComponent>({std::move(scalars)})
+        .set<ColorTableComponent>({std::move(colorTable)})
+        .set<PrimitiveSetsComponent>({std::move(primSets)})
+        .set<TransformComponent>({})
+        .set<VisibilityComponent>({});
+    e.set<MeshComponent>({std::make_shared<InstanceDrawable>(e)});
+    return e;
+}
+
+Entity WindowContext::AddInstance(Entity templateEntity, const glm::mat4& transform)
+{
+    return m_impl->world.entity()
+        .set<TransformComponent>({transform})
+        .set<VisibilityComponent>({true})
+        .add<InstanceOf>(static_cast<flecs::entity>(templateEntity));
 }
 
 Camera& WindowContext::GetCamera() { return m_impl->camera; }
@@ -345,8 +387,37 @@ void WindowContext::BuildMeshes()
 {
     PaletteColor   colormap;
     DeviceContext& dev = GetDevice(0);
-    for (auto [e, mc] : m_impl->registry.View<MeshComponent>())
+
+    // Create the shared identity instance buffer for non-instanced draw calls.
+    glm::mat4 identity{1.f};
+    m_impl->defaultInstanceBuffer.Create(
+        dev.Device(), dev.PhysicalDevice(), sizeof(glm::mat4),
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    m_impl->defaultInstanceBuffer.UploadViaStaging(dev, &identity, sizeof(glm::mat4));
+
+    // Legacy path: pre-built Drawables registered via AddMesh(name, Drawable).
+    m_impl->world.each([&](MeshComponent& mc) {
         mc.mesh->Build(dev, colormap, &m_impl->pool);
+    });
+
+    // Batched path: assign mesh entities to pages and upload.
+    m_impl->batchingSystem.BuildAll(m_impl->world, dev, &m_impl->pool);
+
+    // Instanced path: collect visible instance transforms per template and upload.
+    m_impl->world.each([&](flecs::entity templateEnt, MeshComponent& mc) {
+        auto* id = dynamic_cast<InstanceDrawable*>(mc.mesh.get());
+        if (!id || id->IndexCount() == 0) return;
+
+        std::vector<glm::mat4> transforms;
+        m_impl->world.each([&](flecs::entity e,
+                                const TransformComponent& tc,
+                                const VisibilityComponent& vc) {
+            if (vc.visible && e.has<InstanceOf>(templateEnt))
+                transforms.push_back(tc.matrix);
+        });
+        id->UpdateInstances(dev, transforms);
+    });
 }
 
 void WindowContext::CreateSyncObjects()
@@ -375,7 +446,7 @@ void WindowContext::MainLoop()
     while (!m_impl->widget->ShouldClose()) {
         m_impl->widget->PollEvents();
         for (auto& sys : m_impl->systems)
-            sys->Update(m_impl->registry);
+            sys->Update(m_impl->world);
         DrawFrame();
     }
     vkDeviceWaitIdle(GetDevice(0).Device());
@@ -426,11 +497,24 @@ void WindowContext::DrawFrame()
 
     UpdateUBO(m_impl->currentFrame);
 
+    // Rebuild any pages dirtied by visibility changes, now that the previous
+    // frame's GPU work is complete (guaranteed by vkWaitForFences above).
+    m_impl->batchingSystem.FlushRebuild(&m_impl->pool);
+
     std::vector<DrawCall> drawCalls;
-    for (auto [e, mc, vc] : m_impl->registry.View<MeshComponent, VisibilityComponent>()) {
-        if (vc.visible && mc.mesh->IndexCount() > 0)
-            drawCalls.push_back({&mc.mesh->VertexBuffer(), &mc.mesh->IndexBuffer(), mc.mesh->IndexCount()});
-    }
+    m_impl->world.each([&](MeshComponent& mc, VisibilityComponent& vc) {
+        if (!vc.visible || mc.mesh->IndexCount() == 0) return;
+        const GpuBuffer* instBuf   = mc.mesh->InstanceBuffer();
+        uint32_t         instCount = mc.mesh->InstanceCount();
+        if (!instBuf) {
+            instBuf   = &m_impl->defaultInstanceBuffer;
+            instCount = 1;
+        }
+        drawCalls.push_back({
+            &mc.mesh->VertexBuffer(), &mc.mesh->IndexBuffer(),
+            mc.mesh->IndexCount(), instBuf, instCount
+        });
+    });
     if (drawCalls.empty()) return;
 
     m_impl->recorder.Record(
@@ -512,8 +596,9 @@ void WindowContext::Cleanup()
         m_impl->swapchain.Destroy(device);
         m_impl->renderPass.Destroy(device);
 
-        for (auto [e, mc] : m_impl->registry.View<MeshComponent>())
+        m_impl->world.each([&](MeshComponent& mc) {
             mc.mesh->Destroy(device);
+        });
     }
 
     m_impl->devices.clear();

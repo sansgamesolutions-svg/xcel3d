@@ -75,15 +75,28 @@ void Pipeline::Create(
     binding.stride    = sizeof(MeshVertex);
     binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-    std::array<VkVertexInputAttributeDescription, 3> attrs{};
-    attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(MeshVertex, position)};
-    attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(MeshVertex, normal)};
-    attrs[2] = {2, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(MeshVertex, color)};
+    // Binding 1: per-instance model matrix (mat4 = 64 bytes, one entry per instance).
+    VkVertexInputBindingDescription instanceBinding{};
+    instanceBinding.binding   = 1;
+    instanceBinding.stride    = sizeof(float) * 16;
+    instanceBinding.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+
+    std::array<VkVertexInputBindingDescription, 2> bindings = {binding, instanceBinding};
+
+    // Attributes 0-2: per-vertex geometry. Attributes 3-6: per-instance mat4 rows.
+    std::array<VkVertexInputAttributeDescription, 7> attrs{};
+    attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT,    offsetof(MeshVertex, position)};
+    attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT,    offsetof(MeshVertex, normal)};
+    attrs[2] = {2, 0, VK_FORMAT_R32G32B32_SFLOAT,    offsetof(MeshVertex, color)};
+    attrs[3] = {3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0};
+    attrs[4] = {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16};
+    attrs[5] = {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32};
+    attrs[6] = {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48};
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInput.vertexBindingDescriptionCount   = 1;
-    vertexInput.pVertexBindingDescriptions      = &binding;
+    vertexInput.vertexBindingDescriptionCount   = (uint32_t)bindings.size();
+    vertexInput.pVertexBindingDescriptions      = bindings.data();
     vertexInput.vertexAttributeDescriptionCount = (uint32_t)attrs.size();
     vertexInput.pVertexAttributeDescriptions    = attrs.data();
 

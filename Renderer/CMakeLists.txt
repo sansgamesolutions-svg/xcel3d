@@ -27,7 +27,9 @@ add_library(XcelRenderer STATIC
     Source/DescriptorManager.cpp
     Source/CommandRecorder.cpp
     Source/Swapchain.cpp
-    Source/MeshDrawable.cpp
+    Source/BatchDrawable.cpp
+    Source/BatchingSystem.cpp
+    Source/InstanceDrawable.cpp
     Source/WindowContext.cpp
     Source/Camera.cpp
     "${SHADER_VERT_SPV}"

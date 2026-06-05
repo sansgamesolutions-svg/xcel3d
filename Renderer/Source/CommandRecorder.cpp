@@ -76,11 +76,11 @@ void CommandRecorder::Record(
                             pipeline.PipelineLayout(), 0, 1, &ds, 0, nullptr);
 
     for (const auto& dc : drawCalls) {
-        VkBuffer     vb     = dc.vertexBuffer->Buffer();
-        VkDeviceSize offset = 0;
-        vkCmdBindVertexBuffers(cmd, 0, 1, &vb, &offset);
+        VkBuffer     bufs[2] = {dc.vertexBuffer->Buffer(), dc.instanceBuffer->Buffer()};
+        VkDeviceSize offs[2] = {0, 0};
+        vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
         vkCmdBindIndexBuffer(cmd, dc.indexBuffer->Buffer(), 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmd, dc.indexCount, 1, 0, 0, 0);
+        vkCmdDrawIndexed(cmd, dc.indexCount, dc.instanceCount, 0, 0, 0);
     }
 
     vkCmdEndRenderPass(cmd);

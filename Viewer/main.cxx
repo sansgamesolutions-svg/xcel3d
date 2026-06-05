@@ -1,8 +1,8 @@
 #include "Viewer/Application.h"
 #include "Platforms/GlfwWindowWidget.h"
-#include "Renderer/MeshDrawable.h"
 #include "Kernel/CoordTable.h"
 #include "Kernel/ScalarTable.h"
+#include "Kernel/ColorTable.h"
 #include "Kernel/PrimitiveSet.h"
 #include "Renderer/Camera.h"
 #include <glm/glm.hpp>
@@ -13,7 +13,7 @@
 // Builds a 2x2x2 grid of hexahedral FEM elements (8 elements, 27 nodes).
 // The scalar field is the distance of each element's centroid from the grid center,
 // demonstrating blue-to-red colormap mapping.
-static std::shared_ptr<xcel::MeshDrawable> buildDemoMesh()
+static void buildDemoMesh(xcel::Application& app)
 {
     auto coords  = std::make_shared<xcel::CoordTable>();
     auto scalars = std::make_shared<xcel::ElementScalarTable>();
@@ -25,7 +25,6 @@ static std::shared_ptr<xcel::MeshDrawable> buildDemoMesh()
     for (int i = 0; i < 3; ++i)
         coords->AddCoord({(float)i, (float)j, (float)k});
 
-    // Node index in the 3x3x3 grid
     auto idx = [](int i, int j, int k) -> uint32_t {
         return (uint32_t)(i + j * 3 + k * 9);
     };
@@ -35,7 +34,6 @@ static std::shared_ptr<xcel::MeshDrawable> buildDemoMesh()
     for (int k = 0; k < 2; ++k)
     for (int j = 0; j < 2; ++j)
     for (int i = 0; i < 2; ++i) {
-        // VTK hex node ordering
         xcel::HexPrimitiveSet::value_type e = {
             idx(i,   j,   k  ),
             idx(i+1, j,   k  ),
@@ -52,11 +50,9 @@ static std::shared_ptr<xcel::MeshDrawable> buildDemoMesh()
         scalars->AddScalar(glm::length(centroid - center));
     }
 
-    auto mesh = std::make_shared<xcel::MeshDrawable>();
-    mesh->SetCoords(coords);
-    mesh->SetScalars(scalars);
-    mesh->AddPrimitiveSet(hexSet);
-    return mesh;
+    app.AddMesh("demo", coords, scalars,
+                std::make_shared<xcel::PaletteColor>(),
+                {hexSet});
 }
 
 int main()
@@ -65,8 +61,7 @@ int main()
         auto widget = std::make_unique<xcel::GlfwWindowWidget>(1280, 720, "Xcel3D - FEM Hex Viewer");
         xcel::Application app(std::move(widget));
 
-        auto mesh = buildDemoMesh();
-        app.AddMesh("demo", mesh);
+        buildDemoMesh(app);
 
         // Fit camera to the 2x2x2 bounding box (center = 1,1,1, radius ~= sqrt(3))
         app.GetCamera().FitToSphere({1.f, 1.f, 1.f}, 1.74f);

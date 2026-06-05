@@ -1,3 +1,4 @@
+include(FetchContent)
 
 set(EXTERNAL_ROOT "${CMAKE_SOURCE_DIR}/External")
 
@@ -11,3 +12,20 @@ find_path(GLFW_INCLUDE_DIR NAMES GLFW/glfw3.h PATHS "${GLFW_ROOT}/include" NO_DE
 
 set(GLM_INCLUDE_DIR "${EXTERNAL_ROOT}/glm")
 set(GLSLC_EXECUTABLE "${VULKAN_SDK}/Bin/glslc.exe")
+
+# Flecs ECS — static only, no tests
+set(FLECS_STATIC  ON  CACHE BOOL "" FORCE)
+set(FLECS_SHARED  OFF CACHE BOOL "" FORCE)
+set(FLECS_TESTS   OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    flecs
+    GIT_REPOSITORY https://github.com/SanderMertens/flecs.git
+    GIT_TAG        v4.0.4
+)
+FetchContent_MakeAvailable(flecs)
+
+# Flecs uses C idioms that trigger C4127 (constant conditional) on MSVC.
+# Suppress it for all consumers so /WX doesn't turn it into an error.
+if(MSVC AND TARGET flecs_static)
+    target_compile_options(flecs_static INTERFACE /wd4127)
+endif()

@@ -5,9 +5,13 @@
 #include "Kernel/ColorTable.h"
 #include <glm/glm.hpp>
 #include <cstddef>
+#include <span>
 #include <vector>
 
 namespace xcel {
+
+class ThreadPool;
+struct MeshTessellationInput; // full definition in TessellationStrategy.h
 
 // ============================================================================
 // Tessellation pipeline overview
@@ -36,8 +40,7 @@ namespace xcel {
 // Thread safety:
 //   TessellateRange reads all inputs as read-only after construction.
 //   Multiple threads may call it simultaneously on non-overlapping element
-//   ranges of the same PrimitiveSet.  MeshDrawable::Build exploits this via
-//   ThreadPool.
+//   ranges of the same PrimitiveSet.
 //
 // Output per element type:
 //   PT_HEXAHEDRON  -- 6 quad faces  -- 12 triangles, 24 verts
@@ -68,6 +71,66 @@ struct TessellatedMesh {
 // World-space half-width of line ribbon quads (not true screen-space).
 static constexpr float kLineHalfWidth = 0.005f;
 
+// ── Face connectivity tables ───────────────────────────────────────────────
+// Exposed here so tessellation strategies can use them directly.
+
+// VTK HEX face table — 6 CCW quads viewed from outside, normal = cross(v1-v0, v3-v0).
+constexpr std::array<std::array<int,4>,6> kHexFaces = {{
+    {0, 3, 2, 1},  // bottom (Z-)
+    {4, 5, 6, 7},  // top    (Z+)
+    {0, 1, 5, 4},  // front  (Y-)
+    {3, 7, 6, 2},  // back   (Y+)
+    {0, 4, 7, 3},  // left   (X-)
+    {1, 2, 6, 5},  // right  (X+)
+}};
+
+// VTK TET face table — 4 CCW triangles with outward normals.
+constexpr std::array<std::array<int,3>,4> kTetFaces = {{
+    {0, 2, 1},
+    {0, 1, 3},
+    {1, 2, 3},
+    {2, 0, 3},
+}};
+
+// ── Geometry helpers (used by tessellators and tessellation strategies) ────
+
+namespace detail {
+
+// Append a quad as two CCW triangles (fan: (0,1,2) + (0,2,3)).
+inline void PushQuad(TessellatedMesh& out,
+                     const glm::vec3  p[4],
+                     const glm::vec3& normal,
+                     const glm::vec3& rgb)
+{
+    uint32_t base = static_cast<uint32_t>(out.vertices.size());
+    for (int k = 0; k < 4; ++k)
+        out.vertices.push_back({p[k], normal, rgb});
+    out.indices.push_back(base + 0);
+    out.indices.push_back(base + 1);
+    out.indices.push_back(base + 2);
+    out.indices.push_back(base + 0);
+    out.indices.push_back(base + 2);
+    out.indices.push_back(base + 3);
+}
+
+// Append a triangle as one CCW triangle.
+inline void PushTriangle(TessellatedMesh& out,
+                         const glm::vec3  p[3],
+                         const glm::vec3& normal,
+                         const glm::vec3& rgb)
+{
+    uint32_t base = static_cast<uint32_t>(out.vertices.size());
+    for (int k = 0; k < 3; ++k)
+        out.vertices.push_back({p[k], normal, rgb});
+    out.indices.push_back(base + 0);
+    out.indices.push_back(base + 1);
+    out.indices.push_back(base + 2);
+}
+
+} // namespace detail
+
+// ── Low-level dispatch ─────────────────────────────────────────────────────
+
 // Tessellates [elementBegin, elementEnd) of any PrimitiveSet.
 // Thread-safe for non-overlapping element ranges on the same PrimitiveSet.
 // minScalar / maxScalar must span the *full* ScalarTable for consistent
@@ -90,5 +153,19 @@ TessellatedMesh Tessellate(
     const ScalarTable&  scalars,
     const ColorTable&   colormap
 );
+
+// ── Strategy-based engine ──────────────────────────────────────────────────
+// These functions use the strategy stored in MeshTessellationInput (or fall
+// back to AllFacesStrategy when strategy == nullptr).
+// Full definitions of MeshTessellationInput and strategies: TessellationStrategy.h
+
+// Tessellate one input. Uses parallel chunking if pool != nullptr and element
+// count exceeds the internal threshold, provided the strategy is parallelizable.
+TessellatedMesh TessellateInput(const MeshTessellationInput& inp,
+                                 ThreadPool* pool = nullptr);
+
+// Tessellate multiple inputs and merge into one combined TessellatedMesh.
+TessellatedMesh TessellateAndMerge(std::span<const MeshTessellationInput> inputs,
+                                    ThreadPool* pool = nullptr);
 
 } // namespace xcel

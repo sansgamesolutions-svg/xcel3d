@@ -27,9 +27,14 @@ public:
 
     virtual void Destroy(VkDevice device) = 0;
 
-    virtual const GpuBuffer& VertexBuffer() const = 0;
-    virtual const GpuBuffer& IndexBuffer()  const = 0;
-    virtual uint32_t         IndexCount()   const = 0;
+    virtual const GpuBuffer& VertexBuffer()   const = 0;
+    virtual const GpuBuffer& IndexBuffer()   const = 0;
+    virtual uint32_t         IndexCount()    const = 0;
+
+    // Per-instance data for GPU instancing. Returns nullptr for non-instanced drawables;
+    // callers substitute a shared identity-matrix buffer in that case.
+    virtual const GpuBuffer* InstanceBuffer() const { return nullptr; }
+    virtual uint32_t         InstanceCount()  const { return 1; }
 
 protected:
     Drawable() = default;

@@ -3,18 +3,23 @@
 #include "Common/ISystem.h"
 #include "Platforms/IWindowWidget.h"
 #include "Renderer/DeviceContext.h"
+#include <glm/glm.hpp>
 #include <concepts>
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace xcel {
 
 class Camera;
-class Drawable;
+class CoordTable;
+class ColorTable;
+class PrimitiveSet;
+class ScalarTable;
 
 // Owns the complete Vulkan rendering stack for one application window.
-// The windowing backend is injected as an IWindowWidget â€” callers create a
+// The windowing backend is injected as an IWindowWidget — callers create a
 // GlfwWindowWidget (or any other backend) and move it in:
 //
 //   auto w = std::make_unique<GlfwWindowWidget>(1280, 720, "Title");
@@ -32,9 +37,30 @@ public:
     WindowContext(const WindowContext&)            = delete;
     WindowContext& operator=(const WindowContext&) = delete;
 
-    // Tessellate and upload a mesh to GPU-resident buffers. Must be called
-    // before Run(). Returns the Entity handle for the newly created object.
-    Entity AddMesh(const std::string& name, std::shared_ptr<Drawable> mesh);
+    // ── Batched mesh ───────────────────────────────────────────────────────────
+    // Create a mesh entity. All data goes as ECS components directly on the entity.
+    // BatchingSystem packs it into a shared GPU page (by PrimitiveType + byte budget).
+    // Must be called before Run().
+    Entity AddMesh(const std::string&                         name,
+                   std::shared_ptr<CoordTable>                coords,
+                   std::shared_ptr<ScalarTable>               scalars,
+                   std::shared_ptr<ColorTable>                colorTable,
+                   std::vector<std::shared_ptr<PrimitiveSet>> primSets);
+
+    // ── Instanced mesh ─────────────────────────────────────────────────────────
+    // Create a mesh entity for GPU instancing. An InstanceDrawable is created
+    // internally and wired to the entity's ECS components.
+    // Call AddInstance(entity, transform) for each copy. Must be called before Run().
+    Entity AddInstanceMesh(const std::string&                         name,
+                            std::shared_ptr<CoordTable>                coords,
+                            std::shared_ptr<ScalarTable>               scalars,
+                            std::shared_ptr<ColorTable>                colorTable,
+                            std::vector<std::shared_ptr<PrimitiveSet>> primSets);
+
+    // Create an instance entity that renders templateEntity's mesh at transform.
+    // templateEntity must be created via AddInstanceMesh(). Must be called before Run().
+    Entity AddInstance(Entity templateEntity,
+                       const glm::mat4& transform = glm::mat4{1.f});
 
     // Returns the orbit camera driven by input events.
     Camera& GetCamera();
@@ -53,12 +79,12 @@ public:
         return ref;
     }
 
-    // â”€â”€ Multi-device access â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Multi-device access ────────────────────────────────────────────────────
     size_t         DeviceCount() const;
     DeviceContext& GetDevice(size_t index) const;
     DeviceContext* FindDevice(std::function<bool(const DeviceContext&)> pred) const;
 
-    // â”€â”€ Vulkan instance / surface â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Vulkan instance / surface ──────────────────────────────────────────────
     VkInstance   Instance() const;
     VkSurfaceKHR Surface()  const;
 

@@ -1,0 +1,207 @@
+#include "Renderer/BatchingSystem.h"
+#include "Renderer/BatchDrawable.h"
+#include "Renderer/Component.h"
+#include <unordered_set>
+#include <unordered_map>
+#include <string>
+#include <vector>
+
+namespace xcel {
+
+struct BatchingSystem::Impl {
+    flecs::world*  world         = nullptr;
+    DeviceContext* dev           = nullptr;
+    uint64_t       pageCapacity  = 0;
+    uint32_t       pageCount     = 0;
+
+    std::vector<flecs::entity>   pending;    // registered before BuildAll
+    std::unordered_set<uint64_t> dirtyPages; // page entity ids needing rebuild
+};
+
+BatchingSystem::BatchingSystem(uint64_t pageCapacityBytes)
+    : m_impl(std::make_unique<Impl>())
+{
+    m_impl->pageCapacity = pageCapacityBytes;
+}
+
+BatchingSystem::~BatchingSystem() = default;
+
+void BatchingSystem::Register(flecs::entity meshEntity)
+{
+    m_impl->pending.push_back(meshEntity);
+}
+
+// ── Byte budget estimation ────────────────────────────────────────────────────
+// Derived from MeshTessellator.h output table (sizeof(MeshVertex)=36, sizeof(uint32_t)=4):
+//   HEX  : 24 verts×36 + 36 idx×4 = 1 008 bytes/element
+//   TET  : 12×36  + 12×4           =   480 bytes/element
+//   QUAD : 4×36   + 6×4            =   168 bytes/element
+//   TRI  : 3×36   + 3×4            =   120 bytes/element
+//   LINE : 4×36   + 6×4            =   168 bytes/element
+//   POLYLINE: assume avg 10 nodes → 9 segments × 168
+uint64_t BatchingSystem::EstimateBytes(const PrimitiveSet& ps)
+{
+    const uint64_t kVB = 36;
+    const uint64_t kIB = 4;
+    uint64_t n = ps.ElementCount();
+
+    switch (ps.Type()) {
+    case PrimitiveType::PT_HEXAHEDRON:  return n * (24 * kVB + 36 * kIB);
+    case PrimitiveType::PT_TETRAHEDRON: return n * (12 * kVB + 12 * kIB);
+    case PrimitiveType::PT_QUAD:        return n * ( 4 * kVB +  6 * kIB);
+    case PrimitiveType::PT_TRIANGLE:    return n * ( 3 * kVB +  3 * kIB);
+    case PrimitiveType::PT_LINE:        return n * ( 4 * kVB +  6 * kIB);
+    case PrimitiveType::PT_POLYLINE:    return n * 9 * ( 4 * kVB +  6 * kIB);
+    }
+    return 0;
+}
+
+const char* BatchingSystem::PrimitiveTypeName(PrimitiveType type)
+{
+    switch (type) {
+    case PrimitiveType::PT_HEXAHEDRON:  return "HEX";
+    case PrimitiveType::PT_TETRAHEDRON: return "TET";
+    case PrimitiveType::PT_QUAD:        return "QUAD";
+    case PrimitiveType::PT_TRIANGLE:    return "TRI";
+    case PrimitiveType::PT_LINE:        return "LINE";
+    case PrimitiveType::PT_POLYLINE:    return "POLYLINE";
+    }
+    return "UNKNOWN";
+}
+
+// ── Page management ───────────────────────────────────────────────────────────
+
+flecs::entity BatchingSystem::FindOrCreatePage(
+    flecs::world& world,
+    PrimitiveType type,
+    uint64_t      neededBytes)
+{
+    flecs::entity found;
+
+    world.each([&](flecs::entity e, PageMetaComponent& meta) {
+        if (!found.is_valid() &&
+            meta.primitiveType == type &&
+            (meta.usedBytes + neededBytes) <= meta.capacityBytes)
+        {
+            found = e;
+        }
+    });
+
+    if (found.is_valid()) return found;
+
+    std::string name = std::string("page_") + PrimitiveTypeName(type)
+                     + "_" + std::to_string(m_impl->pageCount++);
+
+    auto bd = std::make_shared<BatchDrawable>();
+
+    flecs::entity page = world.entity()
+        .set<NameComponent>({name})
+        .set<MeshComponent>({std::move(bd)})
+        .set<VisibilityComponent>({true})
+        .set<PageMetaComponent>({type, m_impl->pageCapacity, 0});
+
+    return page;
+}
+
+// ── BuildAll ──────────────────────────────────────────────────────────────────
+
+void BatchingSystem::BuildAll(
+    flecs::world& world,
+    DeviceContext& dev,
+    ThreadPool*    pool)
+{
+    m_impl->world = &world;
+    m_impl->dev   = &dev;
+
+    // Assign each registered mesh entity to page(s) by PrimitiveType.
+    for (flecs::entity e : m_impl->pending) {
+        const PrimitiveSetsComponent* psc = e.get<PrimitiveSetsComponent>();
+        if (!psc) continue;
+
+        std::unordered_map<int, uint64_t> bytesPerType;
+        for (const auto& ps : psc->sets)
+            bytesPerType[static_cast<int>(ps->Type())] += EstimateBytes(*ps);
+
+        for (auto& [typeInt, bytes] : bytesPerType) {
+            auto type = static_cast<PrimitiveType>(typeInt);
+            flecs::entity page = FindOrCreatePage(world, type, bytes);
+            e.add<BelongsToPage>(page);
+
+            auto* meta = page.get_mut<PageMetaComponent>();
+            if (meta) meta->usedBytes += bytes;
+        }
+    }
+    m_impl->pending.clear();
+
+    // Build GPU buffers for all pages.
+    world.each([&](flecs::entity e, const PageMetaComponent&) {
+        RebuildPage(e, pool);
+    });
+
+    // Observer: mark pages dirty when a mesh entity's visibility changes.
+    world.observer<VisibilityComponent>()
+        .event(flecs::OnSet)
+        .each([this](flecs::entity e, const VisibilityComponent&) {
+            if (!e.has<PrimitiveSetsComponent>()) return;
+            e.each<BelongsToPage>([this](flecs::entity page) {
+                m_impl->dirtyPages.insert(page.id());
+            });
+        });
+}
+
+// ── Per-page rebuild ──────────────────────────────────────────────────────────
+
+void BatchingSystem::RebuildPage(flecs::entity pageEntity, ThreadPool* pool)
+{
+    const MeshComponent*     mc   = pageEntity.get<MeshComponent>();
+    const PageMetaComponent* meta = pageEntity.get<PageMetaComponent>();
+    if (!mc || !meta) return;
+
+    auto* bd = dynamic_cast<BatchDrawable*>(mc->mesh.get());
+    if (!bd) return;
+
+    PrimitiveType pageType = meta->primitiveType;
+
+    std::vector<MeshTessellationInput> inputs;
+
+    m_impl->world->each([&](flecs::entity e,
+                              const PrimitiveSetsComponent& psc,
+                              const VisibilityComponent&    vc) {
+        if (!vc.visible || !e.has<BelongsToPage>(pageEntity)) return;
+
+        const CoordTableComponent*  cc = e.get<CoordTableComponent>();
+        const ScalarTableComponent* sc = e.get<ScalarTableComponent>();
+        const ColorTableComponent*  co = e.get<ColorTableComponent>();
+        if (!cc || !sc || !co) return;
+
+        const TessellationStrategyComponent* stc = e.get<TessellationStrategyComponent>();
+        const ITessellationStrategy* strat = stc ? stc->strategy.get() : nullptr;
+
+        for (const auto& ps : psc.sets) {
+            if (ps->Type() != pageType) continue;
+            inputs.push_back({ps.get(),
+                              cc->coords.get(),
+                              sc->scalars.get(),
+                              co->colorTable.get(),
+                              strat});
+        }
+    });
+
+    bd->Rebuild(*m_impl->dev, inputs, pool);
+}
+
+// ── FlushRebuild ──────────────────────────────────────────────────────────────
+
+void BatchingSystem::FlushRebuild(ThreadPool* pool)
+{
+    if (m_impl->dirtyPages.empty() || !m_impl->world) return;
+
+    for (uint64_t id : m_impl->dirtyPages) {
+        flecs::entity page(*m_impl->world, id);
+        if (page.is_valid())
+            RebuildPage(page, pool);
+    }
+    m_impl->dirtyPages.clear();
+}
+
+} // namespace xcel
