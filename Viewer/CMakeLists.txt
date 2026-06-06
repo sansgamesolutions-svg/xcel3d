@@ -8,7 +8,7 @@ target_include_directories(XcelViewer PRIVATE
 )
 
 target_link_libraries(XcelViewer PRIVATE
-    XcelRenderer
+    XcelGraphics
     XcelPlatforms
     XcelCommon
 )

@@ -1,10 +1,10 @@
 #include "Viewer/Application.h"
 #include "Platforms/GlfwWindowWidget.h"
-#include "Kernel/CoordTable.h"
-#include "Kernel/ScalarTable.h"
-#include "Kernel/ColorTable.h"
-#include "Kernel/PrimitiveSet.h"
-#include "Renderer/Camera.h"
+#include "Graphics/CoordTable.h"
+#include "Graphics/ScalarTable.h"
+#include "Graphics/ColorTable.h"
+#include "Graphics/PrimitiveSet.h"
+#include "Graphics/Camera.h"
 #include <glm/glm.hpp>
 #include <memory>
 #include <stdexcept>
@@ -50,9 +50,9 @@ static void buildDemoMesh(xcel::Application& app)
         scalars->AddScalar(glm::length(centroid - center));
     }
 
-    app.AddMesh("demo", coords, scalars,
-                std::make_shared<xcel::PaletteColor>(),
-                {hexSet});
+    app.GetWorld().AddMesh("demo", coords, scalars,
+                           std::make_shared<xcel::PaletteColor>(),
+                           {hexSet});
 }
 
 int main()
