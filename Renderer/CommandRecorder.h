@@ -1,23 +1,13 @@
 #pragma once
 #include "Renderer/DeviceContext.h"
 #include "Renderer/DescriptorManager.h"
+#include "Renderer/DrawCall.h"
 #include <memory>
 #include <span>
 
 namespace xcel {
 
 class Pipeline;
-class GpuBuffer;
-
-struct DrawCall {
-    const GpuBuffer* vertexBuffer;
-    const GpuBuffer* indexBuffer;
-    uint32_t         indexCount;
-    // Instance data — always non-null at submission time.
-    // Non-instanced draws use WindowContext's shared identity-matrix buffer.
-    const GpuBuffer* instanceBuffer  = nullptr;
-    uint32_t         instanceCount   = 1;
-};
 
 class CommandRecorder {
 public:

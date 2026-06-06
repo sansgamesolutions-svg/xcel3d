@@ -1,0 +1,50 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic : enable
+
+layout(local_size_x = 64) in;
+
+// One entry per draw call: world-space AABB of the corresponding geometry.
+struct CullObject {
+    vec4 aabbMin;   // xyz = min corner, w unused
+    vec4 aabbMax;   // xyz = max corner, w unused
+};
+
+layout(set = 0, binding = 0) readonly buffer ObjectBuffer {
+    CullObject objects[];
+};
+
+// One uint per draw call: 0 = culled, 1 = visible.
+// ForwardRenderPass reads this as the "countBuffer" in vkCmdDrawIndexedIndirectCount.
+layout(set = 0, binding = 1) buffer CountBuffer {
+    uint counts[];
+};
+
+layout(push_constant) uniform PC {
+    vec4  planes[6];    // world-space frustum planes (normal + distance, normalised)
+    uint  objectCount;
+} pc;
+
+bool TestAabbFrustum(vec3 aabbMin, vec3 aabbMax)
+{
+    for (int i = 0; i < 6; ++i) {
+        vec3 n  = pc.planes[i].xyz;
+        // Positive vertex: corner of the AABB furthest along the plane normal.
+        vec3 px = mix(aabbMin, aabbMax, greaterThan(n, vec3(0.0)));
+        if (dot(n, px) + pc.planes[i].w < 0.0)
+            return false;
+    }
+    return true;
+}
+
+void main()
+{
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= pc.objectCount) return;
+
+    vec3 aabbMin = objects[id].aabbMin.xyz;
+    vec3 aabbMax = objects[id].aabbMax.xyz;
+
+    // A zero-area AABB (unset) always passes so non-culled geometry is never hidden.
+    bool visible = (aabbMin == aabbMax) || TestAabbFrustum(aabbMin, aabbMax);
+    counts[id] = visible ? 1u : 0u;
+}

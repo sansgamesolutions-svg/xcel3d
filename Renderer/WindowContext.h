@@ -3,6 +3,7 @@
 #include "Common/ISystem.h"
 #include "Platforms/IWindowWidget.h"
 #include "Renderer/DeviceContext.h"
+#include "Renderer/PassOptions.h"
 #include <glm/glm.hpp>
 #include <concepts>
 #include <functional>
@@ -65,6 +66,10 @@ public:
     // Returns the orbit camera driven by input events.
     Camera& GetCamera();
 
+    // Configure which GPU culling passes are active.
+    // Takes effect on the next DrawFrame() call (triggers a RenderGraph rebuild).
+    void SetPassOptions(const PassOptions& opts);
+
     // Enter the blocking render loop. Returns when the window is closed.
     void Run();
 
@@ -95,7 +100,6 @@ private:
     void CreateSurface();
     void EnumerateDevices(bool enableValidation);
     void BuildMeshes();
-    void CreateSyncObjects();
     void MainLoop();
     void DrawFrame();
     void UpdateUBO(uint32_t frameIndex);

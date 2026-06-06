@@ -1,9 +1,8 @@
 #include "Renderer/WindowContext.h"
 #include "Renderer/Swapchain.h"
-#include "Renderer/RenderPass.h"
-#include "Renderer/Pipeline.h"
 #include "Renderer/DescriptorManager.h"
-#include "Renderer/CommandRecorder.h"
+#include "Renderer/RenderGraph.h"
+#include "Renderer/RenderGraphBuilder.h"
 #include "Renderer/Camera.h"
 #include "Renderer/Drawable.h"
 #include "Renderer/GpuBuffer.h"
@@ -22,6 +21,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <set>
 #include <string>
 #include <vector>
@@ -59,7 +59,8 @@ static void DestroyDebugMessenger(
 }
 
 
-struct WindowContext::Impl {
+struct WindowContext::Impl
+{
     // Windowing backend (platform-neutral)
     std::unique_ptr<IWindowWidget> widget;
     bool   framebufferResized = false;
@@ -77,13 +78,15 @@ struct WindowContext::Impl {
     std::vector<std::unique_ptr<DeviceContext>> devices;
 
     // Rendering objects
-    RenderPass        renderPass;
     Swapchain         swapchain;
     DescriptorManager descriptors;
-    Pipeline          pipeline;
-    CommandRecorder   recorder;
     Camera            camera;
     ThreadPool        pool;
+
+    // Multi-pass render graph (owns command buffers, sync objects, and all passes)
+    RenderGraph  renderGraph;
+    PassOptions  passOptions;
+    bool         graphDirty = false;
 
     // ECS world
     flecs::world world;
@@ -96,15 +99,6 @@ struct WindowContext::Impl {
 
     // Shared 1-element identity buffer bound at binding 1 for non-instanced draw calls.
     GpuBuffer defaultInstanceBuffer;
-
-    std::string vertSpvPath = "shaders/mesh.vert.spv";
-    std::string fragSpvPath = "shaders/mesh.frag.spv";
-
-    static constexpr int MAX_FRAMES = DescriptorManager::MAX_FRAMES;
-    VkSemaphore imageAvailableSem[MAX_FRAMES] = {};
-    VkSemaphore renderFinishedSem[MAX_FRAMES] = {};
-    VkFence     inFlightFence[MAX_FRAMES]     = {};
-    uint32_t    currentFrame = 0;
 };
 
 
@@ -190,6 +184,12 @@ Entity WindowContext::AddInstance(Entity templateEntity, const glm::mat4& transf
 }
 
 Camera& WindowContext::GetCamera() { return m_impl->camera; }
+
+void WindowContext::SetPassOptions(const PassOptions& opts)
+{
+    m_impl->passOptions = opts;
+    m_impl->graphDirty  = true;
+}
 
 void WindowContext::Run()
 {
@@ -359,25 +359,18 @@ void WindowContext::InitVulkan()
     EnumerateDevices(true);
 
     DeviceContext& dev = GetDevice(0);
-
-    auto support = Swapchain::QuerySupport(dev.PhysicalDevice(), m_impl->surface);
-    VkFormat colorFmt = support.formats.empty()
-        ? VK_FORMAT_B8G8R8A8_SRGB
-        : support.formats[0].format;
-    for (const auto& f : support.formats)
-        if (f.format == VK_FORMAT_B8G8R8A8_SRGB) { colorFmt = f.format; break; }
-
-    m_impl->renderPass.Create(dev.Device(), colorFmt, VK_FORMAT_D32_SFLOAT);
-    m_impl->swapchain.Create(dev, m_impl->surface, *m_impl->widget, m_impl->renderPass.GetHandle());
     m_impl->descriptors.Create(dev);
-    m_impl->pipeline.Create(dev.Device(),
-                            m_impl->renderPass.GetHandle(),
-                            m_impl->descriptors.Layout(),
-                            m_impl->swapchain.Extent(),
-                            m_impl->vertSpvPath, m_impl->fragSpvPath);
-    m_impl->recorder.Create(dev);
+
+    m_impl->renderGraph = RenderGraphBuilder{}
+        .SetOptions(m_impl->passOptions)
+        .SetSwapchain(m_impl->swapchain)
+        .SetSurface(m_impl->surface)
+        .SetWindow(*m_impl->widget)
+        .SetDescriptors(m_impl->descriptors)
+        .SetShaderDir("shaders/")
+        .Build(dev);
+
     BuildMeshes();
-    CreateSyncObjects();
 }
 
 void WindowContext::BuildMeshes()
@@ -415,26 +408,36 @@ void WindowContext::BuildMeshes()
         });
         id->UpdateInstances(dev, transforms);
     });
+
+    // Compute per-entity bounding boxes from CoordTableComponent positions.
+    m_impl->world.each([&](flecs::entity e, CoordTableComponent& ctc) {
+        if (!ctc.coords || ctc.coords->Size() == 0) return;
+        glm::vec3 bbMin(std::numeric_limits<float>::max());
+        glm::vec3 bbMax(-std::numeric_limits<float>::max());
+        for (const auto& pos : ctc.coords->Data()) {
+            bbMin = glm::min(bbMin, pos);
+            bbMax = glm::max(bbMax, pos);
+        }
+        e.set<BoundingBoxComponent>({bbMin, bbMax});
+    });
+
+    // Compute per-page AABBs as the union of member entity AABBs.
+    m_impl->world.each([&](flecs::entity pageEnt, PageMetaComponent& pm) {
+        glm::vec3 bbMin(std::numeric_limits<float>::max());
+        glm::vec3 bbMax(-std::numeric_limits<float>::max());
+        m_impl->world.each([&](flecs::entity meshEnt, BoundingBoxComponent& bb) {
+            if (meshEnt.has<BelongsToPage>(pageEnt)) {
+                bbMin = glm::min(bbMin, bb.min);
+                bbMax = glm::max(bbMax, bb.max);
+            }
+        });
+        if (bbMin.x <= bbMax.x) {
+            pm.aabbMin = bbMin;
+            pm.aabbMax = bbMax;
+        }
+    });
 }
 
-void WindowContext::CreateSyncObjects()
-{
-    VkDevice device = GetDevice(0).Device();
-
-    VkSemaphoreCreateInfo semInfo{};
-    semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-    VkFenceCreateInfo fenceInfo{};
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-    for (int i = 0; i < Impl::MAX_FRAMES; ++i) {
-        if (vkCreateSemaphore(device, &semInfo, nullptr, &m_impl->imageAvailableSem[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(device, &semInfo, nullptr, &m_impl->renderFinishedSem[i]) != VK_SUCCESS ||
-            vkCreateFence    (device, &fenceInfo, nullptr, &m_impl->inFlightFence[i])   != VK_SUCCESS)
-            throw std::runtime_error("WindowContext: failed to create sync objects");
-    }
-}
 
 void WindowContext::MainLoop()
 {
@@ -472,32 +475,30 @@ void WindowContext::UpdateUBO(uint32_t frameIndex)
 
 void WindowContext::DrawFrame()
 {
-    VkDevice device = GetDevice(0).Device();
+    DeviceContext& dev = GetDevice(0);
 
-    vkWaitForFences(device, 1, &m_impl->inFlightFence[m_impl->currentFrame], VK_TRUE, UINT64_MAX);
-
-    uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(
-        device, m_impl->swapchain.GetHandle(), UINT64_MAX,
-        m_impl->imageAvailableSem[m_impl->currentFrame], VK_NULL_HANDLE, &imageIndex);
-
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        HandleResize();
-        return;
-    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        throw std::runtime_error("WindowContext: vkAcquireNextImageKHR failed");
+    if (m_impl->graphDirty) {
+        vkDeviceWaitIdle(dev.Device());
+        m_impl->renderGraph.Destroy(dev.Device());
+        m_impl->renderGraph = RenderGraphBuilder{}
+            .SetOptions(m_impl->passOptions)
+            .SetSwapchain(m_impl->swapchain)
+            .SetSurface(m_impl->surface)
+            .SetWindow(*m_impl->widget)
+            .SetDescriptors(m_impl->descriptors)
+            .SetShaderDir("shaders/")
+            .Build(dev);
+        m_impl->graphDirty = false;
     }
 
-    vkResetFences(device, 1, &m_impl->inFlightFence[m_impl->currentFrame]);
+    // Wait for the previous frame's GPU work before rebuilding dirty GPU pages.
+    m_impl->renderGraph.WaitForCurrentFrame(dev.Device());
 
-    UpdateUBO(m_impl->currentFrame);
-
-    // Rebuild any pages dirtied by visibility changes, now that the previous
-    // frame's GPU work is complete (guaranteed by vkWaitForFences above).
+    // Rebuild any pages dirtied by visibility changes.
     m_impl->batchingSystem.FlushRebuild(&m_impl->pool);
 
     std::vector<DrawCall> drawCalls;
-    m_impl->world.each([&](MeshComponent& mc, VisibilityComponent& vc) {
+    m_impl->world.each([&](flecs::entity e, MeshComponent& mc, VisibilityComponent& vc) {
         if (!vc.visible || mc.mesh->IndexCount() == 0) return;
         const GpuBuffer* instBuf   = mc.mesh->InstanceBuffer();
         uint32_t         instCount = mc.mesh->InstanceCount();
@@ -505,65 +506,45 @@ void WindowContext::DrawFrame()
             instBuf   = &m_impl->defaultInstanceBuffer;
             instCount = 1;
         }
-        drawCalls.push_back({
-            &mc.mesh->VertexBuffer(), &mc.mesh->IndexBuffer(),
-            mc.mesh->IndexCount(), instBuf, instCount
-        });
+        DrawCall dc{&mc.mesh->VertexBuffer(), &mc.mesh->IndexBuffer(),
+                    mc.mesh->IndexCount(), instBuf, instCount};
+
+        // Populate world-space AABB for culling passes.
+        const auto* pm = e.get<PageMetaComponent>();
+        const auto* bb = e.get<BoundingBoxComponent>();
+        if (pm)      { dc.aabbMin = pm->aabbMin; dc.aabbMax = pm->aabbMax; }
+        else if (bb) { dc.aabbMin = bb->min;     dc.aabbMax = bb->max;     }
+
+        drawCalls.push_back(dc);
     });
     if (drawCalls.empty()) return;
 
-    m_impl->recorder.Record(
-        m_impl->currentFrame,
-        m_impl->swapchain.Framebuffer(imageIndex),
-        m_impl->swapchain.Extent(),
-        m_impl->renderPass.GetHandle(),
-        m_impl->pipeline,
-        m_impl->descriptors,
-        drawCalls);
+    const uint32_t currentFrame = m_impl->renderGraph.CurrentFrame();
+    UpdateUBO(currentFrame);
 
-    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.waitSemaphoreCount   = 1;
-    submitInfo.pWaitSemaphores      = &m_impl->imageAvailableSem[m_impl->currentFrame];
-    submitInfo.pWaitDstStageMask    = &waitStage;
-    submitInfo.commandBufferCount   = 1;
-    submitInfo.pCommandBuffers      = &m_impl->recorder.CommandBuffer(m_impl->currentFrame);
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores    = &m_impl->renderFinishedSem[m_impl->currentFrame];
+    // Build the clip-from-world matrix for GPU culling passes.
+    const float    aspect   = static_cast<float>(m_impl->swapchain.Extent().width)
+                            / static_cast<float>(m_impl->swapchain.Extent().height);
+    const glm::mat4 viewProj = m_impl->camera.ProjMatrix(aspect) * m_impl->camera.ViewMatrix();
 
-    if (vkQueueSubmit(GetDevice(0).GraphicsQueue(), 1, &submitInfo,
-                      m_impl->inFlightFence[m_impl->currentFrame]) != VK_SUCCESS)
-        throw std::runtime_error("WindowContext: vkQueueSubmit failed");
+    PassContext ctx{};
+    ctx.uboDescriptorSet = m_impl->descriptors.DescriptorSet(currentFrame);
+    ctx.directDrawCalls  = drawCalls;
+    ctx.viewProj         = viewProj;
 
-    VkSwapchainKHR sc = m_impl->swapchain.GetHandle();
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores    = &m_impl->renderFinishedSem[m_impl->currentFrame];
-    presentInfo.swapchainCount     = 1;
-    presentInfo.pSwapchains        = &sc;
-    presentInfo.pImageIndices      = &imageIndex;
+    bool needsResize = m_impl->framebufferResized;
+    m_impl->renderGraph.Execute(dev, ctx, needsResize);
 
-    result = vkQueuePresentKHR(GetDevice(0).PresentQueue(), &presentInfo);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_impl->framebufferResized) {
+    if (needsResize) {
         m_impl->framebufferResized = false;
-        HandleResize();
+        m_impl->renderGraph.Resize(dev, m_impl->surface, *m_impl->widget);
     }
-
-    m_impl->currentFrame = (m_impl->currentFrame + 1) % Impl::MAX_FRAMES;
 }
 
 void WindowContext::HandleResize()
 {
-    DeviceContext& dev = GetDevice(0);
-    m_impl->swapchain.Recreate(dev, m_impl->surface, *m_impl->widget, m_impl->renderPass.GetHandle());
-    m_impl->pipeline.Destroy(dev.Device());
-    m_impl->pipeline.Create(dev.Device(),
-                            m_impl->renderPass.GetHandle(),
-                            m_impl->descriptors.Layout(),
-                            m_impl->swapchain.Extent(),
-                            m_impl->vertSpvPath, m_impl->fragSpvPath);
+    // Resize is now handled inside DrawFrame() via RenderGraph::Resize().
+    // This method is kept for the WindowContext.h declaration but is unreachable.
 }
 
 void WindowContext::Cleanup()
@@ -579,17 +560,10 @@ void WindowContext::Cleanup()
         VkDevice device = GetDevice(0).Device();
         vkDeviceWaitIdle(device);
 
-        for (int i = 0; i < Impl::MAX_FRAMES; ++i) {
-            vkDestroySemaphore(device, m_impl->renderFinishedSem[i], nullptr);
-            vkDestroySemaphore(device, m_impl->imageAvailableSem[i], nullptr);
-            vkDestroyFence    (device, m_impl->inFlightFence[i],     nullptr);
-        }
-
-        m_impl->recorder.Destroy(device);
-        m_impl->pipeline.Destroy(device);
+        m_impl->renderGraph.Destroy(device);
+        m_impl->defaultInstanceBuffer.Destroy(device);
         m_impl->descriptors.Destroy(device);
         m_impl->swapchain.Destroy(device);
-        m_impl->renderPass.Destroy(device);
 
         m_impl->world.each([&](MeshComponent& mc) {
             mc.mesh->Destroy(device);

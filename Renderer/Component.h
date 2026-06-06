@@ -56,6 +56,13 @@ struct PrimitiveSetsComponent {
     std::vector<std::shared_ptr<PrimitiveSet>> sets;
 };
 
+// World-space AABB for a mesh or page entity; set by WindowContext::BuildMeshes().
+// Used by FrustumCullPass and OcclusionCullPass.
+struct BoundingBoxComponent {
+    glm::vec3 min{0.f};
+    glm::vec3 max{0.f};
+};
+
 // ── Page metadata ───────────────────────────────────────────────────────────
 
 // Metadata attached to page entities created by BatchingSystem.
@@ -63,6 +70,9 @@ struct PageMetaComponent {
     PrimitiveType primitiveType;
     uint64_t      capacityBytes = 0;
     uint64_t      usedBytes     = 0;
+    // World-space AABB of all mesh entities assigned to this page.
+    glm::vec3     aabbMin{0.f};
+    glm::vec3     aabbMax{0.f};
 };
 
 // Zero-size relationship tag: mesh entity → page entity.
