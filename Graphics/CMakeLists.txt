@@ -54,6 +54,7 @@ add_library(XcelGraphics STATIC
     Source/FrustumCullPass.cpp
     Source/WindowContext.cpp
     # new
+    Source/VulkanContext.cpp
     Source/World.cpp
     "${SHADER_VERT_SPV}"
     "${SHADER_FRAG_SPV}"

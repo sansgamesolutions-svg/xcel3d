@@ -1,24 +1,20 @@
 #pragma once
 #include "Graphics/RenderGraph.h"
 #include "Graphics/PassOptions.h"
+#include "Graphics/Swapchain.h"
+#include "Graphics/DescriptorManager.h"
+#include "Platforms/IWindowWidget.h"
 #include <string>
-#include <memory>
 
 namespace xcel {
 
-class Swapchain;
-class DescriptorManager;
-class IWindowWidget;
-
 // Fluent builder that assembles a RenderGraph from a PassOptions configuration.
-// All Set*() calls are optional (defaults are provided). Build() performs the
-// one-time setup: creates the ForwardRenderPass VkRenderPass, creates/recreates
-// the swapchain with that render pass, then builds all selected passes.
+// No PIMPL: all members are borrowed pointers or POD with no resource ownership —
+// there is nothing to hide or isolate.
 class RenderGraphBuilder
 {
 public:
-    RenderGraphBuilder();
-    ~RenderGraphBuilder();
+    RenderGraphBuilder() = default;
 
     RenderGraphBuilder& SetOptions(const PassOptions& opts);
     RenderGraphBuilder& SetSwapchain(Swapchain& swapchain);
@@ -31,8 +27,13 @@ public:
     RenderGraph Build(DeviceContext& dev);
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> m_impl;
+    PassOptions        m_options;
+    Swapchain*         m_swapchain   = nullptr;
+    VkSurfaceKHR       m_surface     = VK_NULL_HANDLE;
+    IWindowWidget*     m_window      = nullptr;
+    DescriptorManager* m_descriptors = nullptr;
+    std::string        m_shaderDir   = "shaders/";
+    uint32_t           m_maxObjects  = 65536;
 };
 
 } // namespace xcel
