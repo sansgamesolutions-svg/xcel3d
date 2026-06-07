@@ -16,7 +16,8 @@ add_library(XcelIO STATIC
 
 target_include_directories(XcelIO
     PUBLIC
-        "${CMAKE_SOURCE_DIR}"
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+        $<INSTALL_INTERFACE:include/xcel3d>
 )
 
 target_link_libraries(XcelIO

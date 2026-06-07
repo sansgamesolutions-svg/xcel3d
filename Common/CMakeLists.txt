@@ -2,7 +2,11 @@ add_library(XcelCommon STATIC
     Source/ThreadPool.cpp
 )
 
-target_include_directories(XcelCommon PUBLIC ${CMAKE_SOURCE_DIR})
+target_include_directories(XcelCommon
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+        $<INSTALL_INTERFACE:include/xcel3d>
+)
 
 target_compile_features(XcelCommon PUBLIC cxx_std_20)
 

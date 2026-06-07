@@ -4,9 +4,10 @@ add_library(XcelPlatforms STATIC
 
 target_include_directories(XcelPlatforms
     PUBLIC
-        ${CMAKE_SOURCE_DIR}
-        ${GLFW_INCLUDE_DIR}
-        ${Vulkan_INCLUDE_DIRS}
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${GLFW_INCLUDE_DIR}>
+        $<BUILD_INTERFACE:${Vulkan_INCLUDE_DIRS}>
+        $<INSTALL_INTERFACE:include/xcel3d>
 )
 
 target_link_libraries(XcelPlatforms

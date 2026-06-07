@@ -63,9 +63,10 @@ add_library(XcelGraphics STATIC
 
 target_include_directories(XcelGraphics
     PUBLIC
-        ${CMAKE_SOURCE_DIR}
-        ${GLM_INCLUDE_DIR}
-        ${Vulkan_INCLUDE_DIRS}
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${GLM_INCLUDE_DIR}>
+        $<BUILD_INTERFACE:${Vulkan_INCLUDE_DIRS}>
+        $<INSTALL_INTERFACE:include/xcel3d>
 )
 
 target_link_libraries(XcelGraphics

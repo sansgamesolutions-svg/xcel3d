@@ -22,7 +22,6 @@ add_subdirectory(Common)
 add_subdirectory(Platforms)
 add_subdirectory(Graphics)
 add_subdirectory(IO)
-add_subdirectory(Viewer)
 
 # ── CMake package install / export ────────────────────────────────────────────
 include(CMakePackageConfigHelpers)
