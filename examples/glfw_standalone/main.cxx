@@ -1,0 +1,188 @@
+//
+// XcelExample — demonstrates three routes for getting data into the renderer.
+//
+//  Route A  Direct construction of Graphics objects; no IO layer needed.
+//  Route B  Load a .xcel file via IOManager, bridge into World via LoadIntoWorld().
+//  Route C  ComputedScalarTable + ISystem for per-frame live data updates.
+//
+// Build instructions:
+//   cmake -S . -B build -DCMAKE_PREFIX_PATH=<xcel3d-install-dir>
+//   cmake --build build
+//   cd build/bin && ./XcelExample
+//
+
+#include "Viewer/Application.h"
+#include "Platforms/GlfwWindowWidget.h"
+#include "Graphics/CoordTable.h"
+#include "Graphics/ScalarTable.h"
+#include "Graphics/ColorTable.h"
+#include "Graphics/PrimitiveSet.h"
+#include "Graphics/Camera.h"
+#include "Common/ISystem.h"
+#include "IO/Core/IOManager.h"
+#include "IO/Core/SceneLoader.h"
+#include "Graphics/Component.h"
+#include <glm/glm.hpp>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <iostream>
+#include <memory>
+#include <vector>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Route A: build the demo mesh directly from application data.
+// ─────────────────────────────────────────────────────────────────────────────
+static xcel::Entity RouteA_DirectMesh(xcel::Application& app)
+{
+    auto coords  = std::make_shared<xcel::CoordTable>();
+    auto scalars = std::make_shared<xcel::ElementScalarTable>();
+    auto hexSet  = std::make_shared<xcel::HexPrimitiveSet>();
+
+    for (int k = 0; k < 3; ++k)
+    for (int j = 0; j < 3; ++j)
+    for (int i = 0; i < 3; ++i)
+        coords->AddCoord({(float)i, (float)j, (float)k});
+
+    auto idx = [](int i, int j, int k) -> uint32_t {
+        return (uint32_t)(i + j * 3 + k * 9);
+    };
+
+    const glm::vec3 center(1.f, 1.f, 1.f);
+    for (int k = 0; k < 2; ++k)
+    for (int j = 0; j < 2; ++j)
+    for (int i = 0; i < 2; ++i) {
+        xcel::HexPrimitiveSet::value_type e = {
+            idx(i,   j,   k  ), idx(i+1, j,   k  ),
+            idx(i+1, j+1, k  ), idx(i,   j+1, k  ),
+            idx(i,   j,   k+1), idx(i+1, j,   k+1),
+            idx(i+1, j+1, k+1), idx(i,   j+1, k+1),
+        };
+        hexSet->AddElement(e);
+        scalars->AddScalar(glm::length(glm::vec3(i+.5f, j+.5f, k+.5f) - center));
+    }
+
+    return app.GetWorld().AddMesh("route_a_direct",
+        coords, scalars, std::make_shared<xcel::PaletteColor>(), {hexSet});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Route B: load from a .xcel file and bridge into the World.
+// Pass an empty path to skip (the file may not exist in every environment).
+// ─────────────────────────────────────────────────────────────────────────────
+static void RouteB_FileLoad(xcel::Application& app,
+                            const std::filesystem::path& path,
+                            xcel::ThreadPool& pool)
+{
+    if (path.empty() || !std::filesystem::exists(path)) return;
+
+    xcel::io::IOManager io;
+    // Register built-in readers; call io.ScanPluginDir(".") to load plugin DLLs.
+
+    auto future = io.LoadAsync(path, pool);
+    future.wait();  // block for this example; in a real app use io.Poll() each frame
+
+    auto doc = future.get();
+    if (doc) xcel::io::LoadIntoWorld(*doc, app.GetWorld());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Route C: ComputedScalarTable driven by a shared atomic buffer.
+// A background thread (or simulation engine) writes to the buffer; the lambda
+// reads from it each time the GPU tessellation runs.
+// ─────────────────────────────────────────────────────────────────────────────
+static constexpr size_t kLiveElements = 8;
+static std::atomic<float> g_liveScalars[kLiveElements];
+
+static xcel::Entity RouteC_LiveScalars(xcel::Application& app)
+{
+    auto coords = std::make_shared<xcel::CoordTable>();
+    auto hexSet = std::make_shared<xcel::HexPrimitiveSet>();
+
+    for (int k = 0; k < 3; ++k)
+    for (int j = 0; j < 3; ++j)
+    for (int i = 0; i < 3; ++i)
+        coords->AddCoord({(float)i + 4.f, (float)j, (float)k});  // offset so it doesn't overlap A
+
+    auto idx = [](int i, int j, int k) -> uint32_t {
+        return (uint32_t)(i + j * 3 + k * 9);
+    };
+    for (int k = 0; k < 2; ++k)
+    for (int j = 0; j < 2; ++j)
+    for (int i = 0; i < 2; ++i) {
+        xcel::HexPrimitiveSet::value_type e = {
+            idx(i,   j,   k  ), idx(i+1, j,   k  ),
+            idx(i+1, j+1, k  ), idx(i,   j+1, k  ),
+            idx(i,   j,   k+1), idx(i+1, j,   k+1),
+            idx(i+1, j+1, k+1), idx(i,   j+1, k+1),
+        };
+        hexSet->AddElement(e);
+        g_liveScalars[k*4 + j*2 + i].store(0.f, std::memory_order_relaxed);
+    }
+
+    // The lambda captures the atomic array by pointer; no copy of scalar data.
+    auto liveTable = std::make_shared<xcel::ComputedScalarTable>(
+        kLiveElements,
+        [](size_t i) -> float {
+            return g_liveScalars[i].load(std::memory_order_relaxed);
+        });
+
+    return app.GetWorld().AddMesh("route_c_live",
+        coords, liveTable, std::make_shared<xcel::PaletteColor>(), {hexSet});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ISystem that animates the live scalars each frame (simulates a DB/solver push).
+// ─────────────────────────────────────────────────────────────────────────────
+class AnimateScalarsSystem : public xcel::ISystem
+{
+public:
+    void Update(flecs::world&) override
+    {
+        using Clock = std::chrono::steady_clock;
+        const float t = std::chrono::duration<float>(Clock::now().time_since_epoch()).count();
+        for (size_t i = 0; i < kLiveElements; ++i)
+            g_liveScalars[i].store(0.5f + 0.5f * std::sin(t + (float)i * 0.8f),
+                                   std::memory_order_relaxed);
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// main
+// ─────────────────────────────────────────────────────────────────────────────
+int main()
+{
+    try {
+        auto widget = std::make_unique<xcel::GlfwWindowWidget>(1280, 720, "Xcel3D Example");
+        xcel::Application app(std::move(widget));
+
+        // Point to SPIR-V shaders; adjust if running from a different working directory.
+        app.SetShaderDir("shaders/");
+
+        // Route A — direct mesh
+        RouteA_DirectMesh(app);
+
+        // Route B — file load (skipped when path is empty or file absent)
+        // app needs a ThreadPool for the async load; borrow the one inside app
+        // by calling Init() first if you need the pool, or supply your own.
+        // RouteB_FileLoad(app, "scene.xcel", pool);
+
+        // Route C — live scalars animated by a system each frame
+        RouteC_LiveScalars(app);
+        app.AddSystem<AnimateScalarsSystem>();
+
+        app.GetCamera().FitToSphere({2.5f, 1.f, 1.f}, 3.f);
+
+        // Blocking convenience path (same as old Run()):
+        app.Run();
+
+        // --- Embedded / foreign-loop path (e.g. Qt QTimer) ---
+        // app.Init();
+        // while (app.Tick()) { /* Qt can pump its own events here */ }
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Fatal: " << e.what() << "\n";
+        return 1;
+    }
+    return 0;
+}

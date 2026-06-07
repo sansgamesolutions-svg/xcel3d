@@ -11,6 +11,7 @@
 #include "Graphics/World.h"
 #include "Common/ThreadPool.h"
 #include <concepts>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -30,6 +31,13 @@ public:
     Camera& GetCamera();
 
     void SetPassOptions(const PassOptions& opts);
+    void SetShaderDir(std::filesystem::path dir);
+
+    // Two-phase API for embedding in a foreign event loop.
+    // Call Init() once, then Tick() each frame (returns false when the window
+    // requests close). Run() is the blocking convenience wrapper.
+    void Init();
+    bool Tick();
     void Run();
 
     template<typename T, typename... Args>
@@ -52,7 +60,6 @@ public:
 private:
     void InitVulkan();
     void BuildMeshes();
-    void MainLoop();
     void DrawFrame();
     void UpdateUBO(uint32_t frameIndex);
     void Cleanup();
@@ -61,7 +68,10 @@ private:
     // Windowing + input
     std::unique_ptr<IWindowWidget> m_widget;
     double m_lastMouseX = 0.0, m_lastMouseY = 0.0;
-    bool   m_mousePressed = false;
+    bool   m_mousePressed  = false;
+    bool   m_initialized   = false;
+
+    std::filesystem::path m_shaderDir = "shaders/";
 
     // Vulkan bootstrap
     VulkanContext m_vulkan;
