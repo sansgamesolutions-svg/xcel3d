@@ -8,16 +8,6 @@
 
 namespace xcel {
 
-struct Pipeline::Impl {
-    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-    VkPipeline       pipeline       = VK_NULL_HANDLE;
-};
-
-Pipeline::Pipeline()
-    : m_impl(std::make_unique<Impl>()) {}
-
-Pipeline::~Pipeline() = default;
-
 std::vector<char> Pipeline::LoadSpirV(const std::string& path)
 {
     std::ifstream file(path, std::ios::ate | std::ios::binary);
@@ -162,7 +152,7 @@ void Pipeline::Create(
     layoutInfo.setLayoutCount = 1;
     layoutInfo.pSetLayouts    = &descriptorLayout;
 
-    if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &m_impl->pipelineLayout) != VK_SUCCESS)
+    if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
         throw std::runtime_error("Pipeline: vkCreatePipelineLayout failed");
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -176,11 +166,11 @@ void Pipeline::Create(
     pipelineInfo.pMultisampleState   = &multisampling;
     pipelineInfo.pDepthStencilState  = &depthStencil;
     pipelineInfo.pColorBlendState    = &colorBlend;
-    pipelineInfo.layout              = m_impl->pipelineLayout;
+    pipelineInfo.layout              = m_pipelineLayout;
     pipelineInfo.renderPass          = renderPass;
     pipelineInfo.subpass             = 0;
 
-    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_impl->pipeline) != VK_SUCCESS)
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_pipeline) != VK_SUCCESS)
         throw std::runtime_error("Pipeline: vkCreateGraphicsPipelines failed");
 
     vkDestroyShaderModule(device, vertMod, nullptr);
@@ -189,11 +179,11 @@ void Pipeline::Create(
 
 void Pipeline::Destroy(VkDevice device)
 {
-    if (m_impl->pipeline       != VK_NULL_HANDLE) { vkDestroyPipeline(device, m_impl->pipeline, nullptr); m_impl->pipeline = VK_NULL_HANDLE; }
-    if (m_impl->pipelineLayout != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device, m_impl->pipelineLayout, nullptr); m_impl->pipelineLayout = VK_NULL_HANDLE; }
+    if (m_pipeline       != VK_NULL_HANDLE) { vkDestroyPipeline(device, m_pipeline, nullptr); m_pipeline = VK_NULL_HANDLE; }
+    if (m_pipelineLayout != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device, m_pipelineLayout, nullptr); m_pipelineLayout = VK_NULL_HANDLE; }
 }
 
-VkPipeline       Pipeline::GetHandle()      const { return m_impl->pipeline; }
-VkPipelineLayout Pipeline::PipelineLayout() const { return m_impl->pipelineLayout; }
+VkPipeline       Pipeline::GetHandle()      const { return m_pipeline; }
+VkPipelineLayout Pipeline::PipelineLayout() const { return m_pipelineLayout; }
 
 } // namespace xcel

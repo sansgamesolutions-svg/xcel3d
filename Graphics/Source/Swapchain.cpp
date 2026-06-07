@@ -6,25 +6,6 @@
 
 namespace xcel {
 
-struct Swapchain::Impl {
-    VkSwapchainKHR             swapchain      = VK_NULL_HANDLE;
-    VkFormat                   imageFormat    = VK_FORMAT_UNDEFINED;
-    VkExtent2D                 extent         = {0, 0};
-    std::vector<VkImage>       images;
-    std::vector<VkImageView>   imageViews;
-    std::vector<VkFramebuffer> framebuffers;
-
-    VkImage        depthImage     = VK_NULL_HANDLE;
-    VkDeviceMemory depthMemory    = VK_NULL_HANDLE;
-    VkImageView    depthImageView = VK_NULL_HANDLE;
-    VkFormat       depthFormat    = VK_FORMAT_D32_SFLOAT;
-};
-
-Swapchain::Swapchain()
-    : m_impl(std::make_unique<Impl>()) {}
-
-Swapchain::~Swapchain() = default;
-
 SwapchainSupportDetails Swapchain::QuerySupport(VkPhysicalDevice dev, VkSurfaceKHR surface)
 {
     SwapchainSupportDetails details;
@@ -71,19 +52,19 @@ VkExtent2D Swapchain::ChooseExtent(const VkSurfaceCapabilitiesKHR& caps, IWindow
 
 void Swapchain::CreateImageViews(VkDevice device)
 {
-    m_impl->imageViews.resize(m_impl->images.size());
-    for (size_t i = 0; i < m_impl->images.size(); ++i) {
+    m_imageViews.resize(m_images.size());
+    for (size_t i = 0; i < m_images.size(); ++i) {
         VkImageViewCreateInfo info{};
         info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        info.image                           = m_impl->images[i];
+        info.image                           = m_images[i];
         info.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
-        info.format                          = m_impl->imageFormat;
+        info.format                          = m_imageFormat;
         info.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
         info.subresourceRange.baseMipLevel   = 0;
         info.subresourceRange.levelCount     = 1;
         info.subresourceRange.baseArrayLayer = 0;
         info.subresourceRange.layerCount     = 1;
-        if (vkCreateImageView(device, &info, nullptr, &m_impl->imageViews[i]) != VK_SUCCESS)
+        if (vkCreateImageView(device, &info, nullptr, &m_imageViews[i]) != VK_SUCCESS)
             throw std::runtime_error("Swapchain: vkCreateImageView failed");
     }
 }
@@ -103,8 +84,8 @@ void Swapchain::CreateDepthResources(DeviceContext& dev)
     VkImageCreateInfo imgInfo{};
     imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imgInfo.imageType     = VK_IMAGE_TYPE_2D;
-    imgInfo.format        = m_impl->depthFormat;
-    imgInfo.extent        = {m_impl->extent.width, m_impl->extent.height, 1};
+    imgInfo.format        = m_depthFormat;
+    imgInfo.extent        = {m_extent.width, m_extent.height, 1};
     imgInfo.mipLevels     = 1;
     imgInfo.arrayLayers   = 1;
     imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
@@ -113,11 +94,11 @@ void Swapchain::CreateDepthResources(DeviceContext& dev)
     imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
     imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    if (vkCreateImage(dev.Device(), &imgInfo, nullptr, &m_impl->depthImage) != VK_SUCCESS)
+    if (vkCreateImage(dev.Device(), &imgInfo, nullptr, &m_depthImage) != VK_SUCCESS)
         throw std::runtime_error("Swapchain: vkCreateImage (depth) failed");
 
     VkMemoryRequirements memReq;
-    vkGetImageMemoryRequirements(dev.Device(), m_impl->depthImage, &memReq);
+    vkGetImageMemoryRequirements(dev.Device(), m_depthImage, &memReq);
 
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -126,40 +107,40 @@ void Swapchain::CreateDepthResources(DeviceContext& dev)
         dev.PhysicalDevice(), memReq.memoryTypeBits,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    if (vkAllocateMemory(dev.Device(), &allocInfo, nullptr, &m_impl->depthMemory) != VK_SUCCESS)
+    if (vkAllocateMemory(dev.Device(), &allocInfo, nullptr, &m_depthMemory) != VK_SUCCESS)
         throw std::runtime_error("Swapchain: vkAllocateMemory (depth) failed");
 
-    vkBindImageMemory(dev.Device(), m_impl->depthImage, m_impl->depthMemory, 0);
+    vkBindImageMemory(dev.Device(), m_depthImage, m_depthMemory, 0);
 
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image                           = m_impl->depthImage;
+    viewInfo.image                           = m_depthImage;
     viewInfo.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format                          = m_impl->depthFormat;
+    viewInfo.format                          = m_depthFormat;
     viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
     viewInfo.subresourceRange.baseMipLevel   = 0;
     viewInfo.subresourceRange.levelCount     = 1;
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount     = 1;
 
-    if (vkCreateImageView(dev.Device(), &viewInfo, nullptr, &m_impl->depthImageView) != VK_SUCCESS)
+    if (vkCreateImageView(dev.Device(), &viewInfo, nullptr, &m_depthImageView) != VK_SUCCESS)
         throw std::runtime_error("Swapchain: vkCreateImageView (depth) failed");
 }
 
 void Swapchain::CreateFramebuffers(VkDevice device, VkRenderPass renderPass)
 {
-    m_impl->framebuffers.resize(m_impl->imageViews.size());
-    for (size_t i = 0; i < m_impl->imageViews.size(); ++i) {
-        std::array<VkImageView, 2> attachments = {m_impl->imageViews[i], m_impl->depthImageView};
+    m_framebuffers.resize(m_imageViews.size());
+    for (size_t i = 0; i < m_imageViews.size(); ++i) {
+        std::array<VkImageView, 2> attachments = {m_imageViews[i], m_depthImageView};
         VkFramebufferCreateInfo info{};
         info.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         info.renderPass      = renderPass;
         info.attachmentCount = (uint32_t)attachments.size();
         info.pAttachments    = attachments.data();
-        info.width           = m_impl->extent.width;
-        info.height          = m_impl->extent.height;
+        info.width           = m_extent.width;
+        info.height          = m_extent.height;
         info.layers          = 1;
-        if (vkCreateFramebuffer(device, &info, nullptr, &m_impl->framebuffers[i]) != VK_SUCCESS)
+        if (vkCreateFramebuffer(device, &info, nullptr, &m_framebuffers[i]) != VK_SUCCESS)
             throw std::runtime_error("Swapchain: vkCreateFramebuffer failed");
     }
 }
@@ -169,8 +150,8 @@ void Swapchain::Create(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& 
     auto support         = QuerySupport(dev.PhysicalDevice(), surface);
     auto fmt             = ChooseSurfaceFormat(support.formats);
     auto mode            = ChoosePresentMode(support.presentModes);
-    m_impl->extent       = ChooseExtent(support.capabilities, window);
-    m_impl->imageFormat  = fmt.format;
+    m_extent       = ChooseExtent(support.capabilities, window);
+    m_imageFormat  = fmt.format;
 
     uint32_t imageCount = support.capabilities.minImageCount + 1;
     if (support.capabilities.maxImageCount > 0)
@@ -182,7 +163,7 @@ void Swapchain::Create(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& 
     info.minImageCount    = imageCount;
     info.imageFormat      = fmt.format;
     info.imageColorSpace  = fmt.colorSpace;
-    info.imageExtent      = m_impl->extent;
+    info.imageExtent      = m_extent;
     info.imageArrayLayers = 1;
     info.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
@@ -201,13 +182,13 @@ void Swapchain::Create(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& 
     info.clipped        = VK_TRUE;
     info.oldSwapchain   = VK_NULL_HANDLE;
 
-    if (vkCreateSwapchainKHR(dev.Device(), &info, nullptr, &m_impl->swapchain) != VK_SUCCESS)
+    if (vkCreateSwapchainKHR(dev.Device(), &info, nullptr, &m_swapchain) != VK_SUCCESS)
         throw std::runtime_error("Swapchain: vkCreateSwapchainKHR failed");
 
     uint32_t count = 0;
-    vkGetSwapchainImagesKHR(dev.Device(), m_impl->swapchain, &count, nullptr);
-    m_impl->images.resize(count);
-    vkGetSwapchainImagesKHR(dev.Device(), m_impl->swapchain, &count, m_impl->images.data());
+    vkGetSwapchainImagesKHR(dev.Device(), m_swapchain, &count, nullptr);
+    m_images.resize(count);
+    vkGetSwapchainImagesKHR(dev.Device(), m_swapchain, &count, m_images.data());
 
     CreateImageViews(dev.Device());
     CreateDepthResources(dev);
@@ -216,20 +197,20 @@ void Swapchain::Create(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& 
 
 void Swapchain::Destroy(VkDevice device)
 {
-    for (auto fb : m_impl->framebuffers)   vkDestroyFramebuffer(device, fb, nullptr);
-    if (m_impl->depthImageView != VK_NULL_HANDLE) vkDestroyImageView(device, m_impl->depthImageView, nullptr);
-    if (m_impl->depthImage     != VK_NULL_HANDLE) vkDestroyImage(device, m_impl->depthImage, nullptr);
-    if (m_impl->depthMemory    != VK_NULL_HANDLE) vkFreeMemory(device, m_impl->depthMemory, nullptr);
-    for (auto iv : m_impl->imageViews)     vkDestroyImageView(device, iv, nullptr);
-    if (m_impl->swapchain      != VK_NULL_HANDLE) vkDestroySwapchainKHR(device, m_impl->swapchain, nullptr);
+    for (auto fb : m_framebuffers)   vkDestroyFramebuffer(device, fb, nullptr);
+    if (m_depthImageView != VK_NULL_HANDLE) vkDestroyImageView(device, m_depthImageView, nullptr);
+    if (m_depthImage     != VK_NULL_HANDLE) vkDestroyImage(device, m_depthImage, nullptr);
+    if (m_depthMemory    != VK_NULL_HANDLE) vkFreeMemory(device, m_depthMemory, nullptr);
+    for (auto iv : m_imageViews)     vkDestroyImageView(device, iv, nullptr);
+    if (m_swapchain      != VK_NULL_HANDLE) vkDestroySwapchainKHR(device, m_swapchain, nullptr);
 
-    m_impl->framebuffers.clear();
-    m_impl->imageViews.clear();
-    m_impl->images.clear();
-    m_impl->depthImageView = VK_NULL_HANDLE;
-    m_impl->depthImage     = VK_NULL_HANDLE;
-    m_impl->depthMemory    = VK_NULL_HANDLE;
-    m_impl->swapchain      = VK_NULL_HANDLE;
+    m_framebuffers.clear();
+    m_imageViews.clear();
+    m_images.clear();
+    m_depthImageView = VK_NULL_HANDLE;
+    m_depthImage     = VK_NULL_HANDLE;
+    m_depthMemory    = VK_NULL_HANDLE;
+    m_swapchain      = VK_NULL_HANDLE;
 }
 
 void Swapchain::Recreate(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& window, VkRenderPass renderPass)
@@ -244,10 +225,10 @@ void Swapchain::Recreate(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget
     Create(dev, surface, window, renderPass);
 }
 
-VkSwapchainKHR Swapchain::GetHandle()          const { return m_impl->swapchain; }
-VkFormat       Swapchain::ImageFormat()        const { return m_impl->imageFormat; }
-VkExtent2D     Swapchain::Extent()             const { return m_impl->extent; }
-uint32_t       Swapchain::ImageCount()         const { return (uint32_t)m_impl->imageViews.size(); }
-VkFramebuffer  Swapchain::Framebuffer(uint32_t i) const { return m_impl->framebuffers[i]; }
+VkSwapchainKHR Swapchain::GetHandle()          const { return m_swapchain; }
+VkFormat       Swapchain::ImageFormat()        const { return m_imageFormat; }
+VkExtent2D     Swapchain::Extent()             const { return m_extent; }
+uint32_t       Swapchain::ImageCount()         const { return (uint32_t)m_imageViews.size(); }
+VkFramebuffer  Swapchain::Framebuffer(uint32_t i) const { return m_framebuffers[i]; }
 
 } // namespace xcel

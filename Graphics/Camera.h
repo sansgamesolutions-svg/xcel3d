@@ -1,20 +1,17 @@
 #pragma once
-#include <memory>
 #include <glm/glm.hpp>
 
 namespace xcel {
 
-// Orbit camera defined by a target point and spherical coordinates.
-class Camera {
+class Camera
+{
 public:
-    Camera();
-    ~Camera();
+    Camera()  = default;
+    ~Camera() = default;
 
     void Orbit(float dAzimuth, float dElevation);
     void Zoom(float dRadius);
     void Pan(float dx, float dy);
-
-    // Fit camera so the given bounding sphere fills roughly 70% of the view.
     void FitToSphere(const glm::vec3& center, float radius);
 
     glm::mat4 ViewMatrix() const;
@@ -26,8 +23,10 @@ public:
     float farPlane  = 1000.0f;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> m_impl;
+    glm::vec3 m_target    = {0.f, 0.f, 0.f};
+    float     m_azimuth   = 0.f;
+    float     m_elevation = 0.3f;
+    float     m_radius    = 5.f;
 };
 
 } // namespace xcel

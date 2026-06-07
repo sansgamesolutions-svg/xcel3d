@@ -1,26 +1,15 @@
 #pragma once
 #include "Graphics/IPass.h"
-#include <memory>
+#include "Graphics/GpuBuffer.h"
+#include <string>
 
 namespace xcel {
 
-// GPU frustum culling compute pass.
-//
-// Per frame:
-//  1. Uploads per-draw-call AABBs and pre-filled VkDrawIndexedIndirectCommand entries
-//     to host-visible buffers.
-//  2. Resets the per-slot draw-count buffer via vkCmdFillBuffer.
-//  3. Dispatches a compute shader that tests each AABB against the 6 frustum planes
-//     extracted from ctx.viewProj and writes 1 or 0 to counts[slot].
-//  4. Emits a pipeline barrier so ForwardRenderPass can safely use the count buffer
-//     via vkCmdDrawIndexedIndirectCount.
-//
-// ctx.indirectDrawBuffer and ctx.drawCountBuffer are set for ForwardRenderPass.
 class FrustumCullPass final : public IPass
 {
 public:
-    FrustumCullPass();
-    ~FrustumCullPass() override;
+    FrustumCullPass()  = default;
+    ~FrustumCullPass() = default;
 
     FrustumCullPass(const FrustumCullPass&)            = delete;
     FrustumCullPass& operator=(const FrustumCullPass&) = delete;
@@ -31,8 +20,20 @@ public:
     void Destroy(VkDevice)                     override;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> m_impl;
+    VkDevice              m_device         = VK_NULL_HANDLE;
+    VkPhysicalDevice      m_physDevice     = VK_NULL_HANDLE;
+    VkDescriptorSetLayout m_dsLayout       = VK_NULL_HANDLE;
+    VkDescriptorPool      m_dsPool         = VK_NULL_HANDLE;
+    VkDescriptorSet       m_descriptorSet  = VK_NULL_HANDLE;
+    VkPipelineLayout      m_pipelineLayout = VK_NULL_HANDLE;
+    VkPipeline            m_pipeline       = VK_NULL_HANDLE;
+
+    GpuBuffer m_inputSSBO;
+    GpuBuffer m_indirectBuffer;
+    GpuBuffer m_countBuffer;
+
+    uint32_t    m_maxDrawCalls = 0;
+    std::string m_shaderDir;
 };
 
 } // namespace xcel

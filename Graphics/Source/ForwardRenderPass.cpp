@@ -7,37 +7,24 @@
 
 namespace xcel {
 
-struct ForwardRenderPass::Impl
-{
-    RenderPass            renderPass;
-    Pipeline              pipeline;
-    VkDescriptorSetLayout descriptorLayout = VK_NULL_HANDLE;
-    std::string           shaderDir;
-};
-
-ForwardRenderPass::ForwardRenderPass()
-    : m_impl(std::make_unique<Impl>()) {}
-
-ForwardRenderPass::~ForwardRenderPass() = default;
-
 void ForwardRenderPass::CreateRenderPass(DeviceContext& dev,
                                          VkFormat colorFormat,
                                          VkFormat depthFormat)
 {
-    m_impl->renderPass.Create(dev.Device(), colorFormat, depthFormat);
+    m_renderPass.Create(dev.Device(), colorFormat, depthFormat);
 }
 
 VkRenderPass ForwardRenderPass::GetRenderPass() const
 {
-    return m_impl->renderPass.GetHandle();
+    return m_renderPass.GetHandle();
 }
 
 void ForwardRenderPass::Build(const BuildPassInfo& info)
 {
-    m_impl->descriptorLayout = info.uboLayout;
-    m_impl->shaderDir        = info.shaderDir;
+    m_descriptorLayout = info.uboLayout;
+    m_shaderDir        = info.shaderDir;
 
-    m_impl->pipeline.Create(
+    m_pipeline.Create(
         info.dev->Device(),
         info.forwardRenderPass,
         info.uboLayout,
@@ -48,14 +35,14 @@ void ForwardRenderPass::Build(const BuildPassInfo& info)
 
 void ForwardRenderPass::Rebuild(DeviceContext& dev, VkExtent2D newExtent)
 {
-    m_impl->pipeline.Destroy(dev.Device());
-    m_impl->pipeline.Create(
+    m_pipeline.Destroy(dev.Device());
+    m_pipeline.Create(
         dev.Device(),
-        m_impl->renderPass.GetHandle(),
-        m_impl->descriptorLayout,
+        m_renderPass.GetHandle(),
+        m_descriptorLayout,
         newExtent,
-        m_impl->shaderDir + "mesh.vert.spv",
-        m_impl->shaderDir + "mesh.frag.spv");
+        m_shaderDir + "mesh.vert.spv",
+        m_shaderDir + "mesh.frag.spv");
 }
 
 void ForwardRenderPass::Record(VkCommandBuffer cmd, PassContext& ctx)
@@ -66,7 +53,7 @@ void ForwardRenderPass::Record(VkCommandBuffer cmd, PassContext& ctx)
 
     VkRenderPassBeginInfo rpInfo{};
     rpInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpInfo.renderPass        = m_impl->renderPass.GetHandle();
+    rpInfo.renderPass        = m_renderPass.GetHandle();
     rpInfo.framebuffer       = ctx.swapchainFramebuffer;
     rpInfo.renderArea.offset = {0, 0};
     rpInfo.renderArea.extent = ctx.extent;
@@ -75,10 +62,10 @@ void ForwardRenderPass::Record(VkCommandBuffer cmd, PassContext& ctx)
 
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_impl->pipeline.GetHandle());
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.GetHandle());
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            m_impl->pipeline.PipelineLayout(),
+                            m_pipeline.PipelineLayout(),
                             0, 1, &ctx.uboDescriptorSet, 0, nullptr);
 
     if (ctx.indirectDrawCount > 0 && ctx.drawCountBuffer != VK_NULL_HANDLE) {
@@ -115,8 +102,8 @@ void ForwardRenderPass::Record(VkCommandBuffer cmd, PassContext& ctx)
 
 void ForwardRenderPass::Destroy(VkDevice device)
 {
-    m_impl->pipeline.Destroy(device);
-    m_impl->renderPass.Destroy(device);
+    m_pipeline.Destroy(device);
+    m_renderPass.Destroy(device);
 }
 
 } // namespace xcel

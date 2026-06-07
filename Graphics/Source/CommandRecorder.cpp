@@ -7,33 +7,24 @@
 
 namespace xcel {
 
-struct CommandRecorder::Impl {
-    std::vector<VkCommandBuffer> cmdBuffers;
-};
-
-CommandRecorder::CommandRecorder()
-    : m_impl(std::make_unique<Impl>()) {}
-
-CommandRecorder::~CommandRecorder() = default;
-
 void CommandRecorder::Create(DeviceContext& dev)
 {
-    m_impl->cmdBuffers.resize(DescriptorManager::MAX_FRAMES);
+    m_cmdBuffers.resize(DescriptorManager::MAX_FRAMES);
 
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool        = dev.GraphicsCommandPool();
     allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = (uint32_t)m_impl->cmdBuffers.size();
+    allocInfo.commandBufferCount = (uint32_t)m_cmdBuffers.size();
 
-    if (vkAllocateCommandBuffers(dev.Device(), &allocInfo, m_impl->cmdBuffers.data()) != VK_SUCCESS)
+    if (vkAllocateCommandBuffers(dev.Device(), &allocInfo, m_cmdBuffers.data()) != VK_SUCCESS)
         throw std::runtime_error("CommandRecorder: vkAllocateCommandBuffers failed");
 }
 
 void CommandRecorder::Destroy(VkDevice device)
 {
     (void)device;
-    m_impl->cmdBuffers.clear();
+    m_cmdBuffers.clear();
 }
 
 void CommandRecorder::Record(
@@ -45,7 +36,7 @@ void CommandRecorder::Record(
     DescriptorManager&        descriptors,
     std::span<const DrawCall> drawCalls)
 {
-    VkCommandBuffer cmd = m_impl->cmdBuffers[frameIndex];
+    VkCommandBuffer cmd = m_cmdBuffers[frameIndex];
 
     vkResetCommandBuffer(cmd, 0);
 
@@ -91,7 +82,7 @@ void CommandRecorder::Record(
 
 const VkCommandBuffer& CommandRecorder::CommandBuffer(uint32_t i) const
 {
-    return m_impl->cmdBuffers[i];
+    return m_cmdBuffers[i];
 }
 
 } // namespace xcel

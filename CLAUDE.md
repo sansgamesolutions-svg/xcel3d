@@ -53,21 +53,21 @@ cd out/build/x64-Debug/bin
 
 ## C++ idioms
 
+### Resource lifecycle
+- Vulkan resource classes use explicit **two-phase lifecycle**: `Create(…)` acquires,
+  `Destroy(device)` releases. Destructors do not call `Destroy()`.
+- No PIMPL (`struct Impl`) unless binary-compatibility or compile-time isolation is
+  explicitly required. Put private members directly in the class header.
+- Value-type classes initialize in their constructor; no separate `Init()` needed.
+- `std::lock_guard` / `std::scoped_lock` for mutexes — never manual `lock()` / `unlock()`
+
 ## Notes for Claude
 
-- When generating any class, apply PIMPL to its header automatically
-- C++ Functions start with capital letter 
-- When generating any resource-owning class, apply RAII automatically
+- C++ Functions start with capital letter
 - Never use raw `new` / `delete` in generated code
 - Prefer `std::unique_ptr` over `std::shared_ptr` unless shared ownership is explicitly requested
 - Always add `requires` clauses to template parameters
 - After scaffolding, offer to generate Catch2 tests for the new class
-
-### RAII
-- **Every resource has an owner** — file handles, sockets, locks, GPU buffers
-- No ad-hoc `try/catch` for cleanup; RAII wrappers handle it
-- `std::lock_guard` / `std::scoped_lock` for mutexes — never manual `lock()` / `unlock()`
-- Prompt rule: *When generating any class that acquires a resource, always pair acquisition in the constructor with release in the destructor.*
 
 ### CRTP (Curiously Recurring Template Pattern)
 - Use for **static polymorphism** — avoids vtable overhead in hot paths

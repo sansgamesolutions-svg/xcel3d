@@ -1,13 +1,14 @@
 #pragma once
 #include "Platforms/IWindowWidget.h"
-#include <memory>
+#include <functional>
 #include <string>
+
+struct GLFWwindow;  // forward declaration — keeps <GLFW/glfw3.h> out of this header
 
 namespace xcel {
 
-// GLFW-backed implementation of IWindowWidget.
-// <GLFW/glfw3.h> is included only in GlfwWindowWidget.cpp — this header is clean.
-class GlfwWindowWidget : public IWindowWidget {
+class GlfwWindowWidget : public IWindowWidget
+{
 public:
     GlfwWindowWidget(int width, int height, const std::string& title);
     ~GlfwWindowWidget() override;
@@ -15,7 +16,6 @@ public:
     GlfwWindowWidget(const GlfwWindowWidget&)            = delete;
     GlfwWindowWidget& operator=(const GlfwWindowWidget&) = delete;
 
-    // -- IWindowWidget ---------------------------------------------------------
     [[nodiscard]] bool ShouldClose() const override;
     void PollEvents() override;
     void WaitEvents() override;
@@ -31,8 +31,17 @@ public:
     void SetMouseButtonCallback      (std::function<void(MouseButton, InputAction, int)> cb) override;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> m_impl;
+    static void OnFramebufferResize(GLFWwindow* w, int width, int height);
+    static void OnScroll(GLFWwindow* w, double xOffset, double yOffset);
+    static void OnCursorPos(GLFWwindow* w, double x, double y);
+    static void OnMouseButton(GLFWwindow* w, int button, int action, int mods);
+
+    GLFWwindow* m_window = nullptr;
+
+    std::function<void(int, int)>                      m_resizeCb;
+    std::function<void(double, double)>                m_scrollCb;
+    std::function<void(double, double)>                m_cursorCb;
+    std::function<void(MouseButton, InputAction, int)> m_mouseBtnCb;
 };
 
 } // namespace xcel

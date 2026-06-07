@@ -62,37 +62,14 @@ static std::vector<char> LoadSpirV(const std::string& path)
 
 } // anonymous namespace
 
-struct FrustumCullPass::Impl
-{
-    VkDevice              device          = VK_NULL_HANDLE;
-    VkPhysicalDevice      physDevice      = VK_NULL_HANDLE;
-    VkDescriptorSetLayout dsLayout        = VK_NULL_HANDLE;
-    VkDescriptorPool      dsPool          = VK_NULL_HANDLE;
-    VkDescriptorSet       descriptorSet   = VK_NULL_HANDLE;
-    VkPipelineLayout      pipelineLayout  = VK_NULL_HANDLE;
-    VkPipeline            pipeline        = VK_NULL_HANDLE;
-
-    GpuBuffer inputSSBO;        // CullObject[]           HOST_VISIBLE
-    GpuBuffer indirectBuffer;   // VkDrawIndexedIndirectCommand[]  HOST_VISIBLE | INDIRECT
-    GpuBuffer countBuffer;      // uint[]                 DEVICE_LOCAL | STORAGE | INDIRECT | TRANSFER_DST
-
-    uint32_t maxDrawCalls = 0;
-    std::string shaderDir;
-};
-
-FrustumCullPass::FrustumCullPass()
-    : m_impl(std::make_unique<Impl>()) {}
-
-FrustumCullPass::~FrustumCullPass() = default;
-
 void FrustumCullPass::Build(const BuildPassInfo& info)
 {
-    m_impl->device     = info.dev->Device();
-    m_impl->physDevice = info.dev->PhysicalDevice();
-    m_impl->shaderDir  = info.shaderDir;
-    m_impl->maxDrawCalls = std::max(info.maxObjects, 1u);
+    m_device     = info.dev->Device();
+    m_physDevice = info.dev->PhysicalDevice();
+    m_shaderDir  = info.shaderDir;
+    m_maxDrawCalls = std::max(info.maxObjects, 1u);
 
-    VkDevice dev = m_impl->device;
+    VkDevice dev = m_device;
 
     // ── Descriptor set layout ────────────────────────────────────────────────
     std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
@@ -110,7 +87,7 @@ void FrustumCullPass::Build(const BuildPassInfo& info)
     dsLayoutCI.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     dsLayoutCI.bindingCount = static_cast<uint32_t>(bindings.size());
     dsLayoutCI.pBindings    = bindings.data();
-    if (vkCreateDescriptorSetLayout(dev, &dsLayoutCI, nullptr, &m_impl->dsLayout) != VK_SUCCESS)
+    if (vkCreateDescriptorSetLayout(dev, &dsLayoutCI, nullptr, &m_dsLayout) != VK_SUCCESS)
         throw std::runtime_error("FrustumCullPass: vkCreateDescriptorSetLayout failed");
 
     // ── Descriptor pool ──────────────────────────────────────────────────────
@@ -123,15 +100,15 @@ void FrustumCullPass::Build(const BuildPassInfo& info)
     poolCI.maxSets       = 1;
     poolCI.poolSizeCount = 1;
     poolCI.pPoolSizes    = &poolSize;
-    if (vkCreateDescriptorPool(dev, &poolCI, nullptr, &m_impl->dsPool) != VK_SUCCESS)
+    if (vkCreateDescriptorPool(dev, &poolCI, nullptr, &m_dsPool) != VK_SUCCESS)
         throw std::runtime_error("FrustumCullPass: vkCreateDescriptorPool failed");
 
     VkDescriptorSetAllocateInfo dsAllocInfo{};
     dsAllocInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    dsAllocInfo.descriptorPool     = m_impl->dsPool;
+    dsAllocInfo.descriptorPool     = m_dsPool;
     dsAllocInfo.descriptorSetCount = 1;
-    dsAllocInfo.pSetLayouts        = &m_impl->dsLayout;
-    if (vkAllocateDescriptorSets(dev, &dsAllocInfo, &m_impl->descriptorSet) != VK_SUCCESS)
+    dsAllocInfo.pSetLayouts        = &m_dsLayout;
+    if (vkAllocateDescriptorSets(dev, &dsAllocInfo, &m_descriptorSet) != VK_SUCCESS)
         throw std::runtime_error("FrustumCullPass: vkAllocateDescriptorSets failed");
 
     // ── Pipeline layout (push constants: 6 * vec4 + uint = 100 bytes) ───────
@@ -143,14 +120,14 @@ void FrustumCullPass::Build(const BuildPassInfo& info)
     VkPipelineLayoutCreateInfo plCI{};
     plCI.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     plCI.setLayoutCount         = 1;
-    plCI.pSetLayouts            = &m_impl->dsLayout;
+    plCI.pSetLayouts            = &m_dsLayout;
     plCI.pushConstantRangeCount = 1;
     plCI.pPushConstantRanges    = &pcRange;
-    if (vkCreatePipelineLayout(dev, &plCI, nullptr, &m_impl->pipelineLayout) != VK_SUCCESS)
+    if (vkCreatePipelineLayout(dev, &plCI, nullptr, &m_pipelineLayout) != VK_SUCCESS)
         throw std::runtime_error("FrustumCullPass: vkCreatePipelineLayout failed");
 
     // ── Compute pipeline ─────────────────────────────────────────────────────
-    auto spv = LoadSpirV(m_impl->shaderDir + "frustum_cull.comp.spv");
+    auto spv = LoadSpirV(m_shaderDir + "frustum_cull.comp.spv");
 
     VkShaderModuleCreateInfo smCI{};
     smCI.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -166,27 +143,27 @@ void FrustumCullPass::Build(const BuildPassInfo& info)
     cpCI.stage.stage        = VK_SHADER_STAGE_COMPUTE_BIT;
     cpCI.stage.module       = shaderModule;
     cpCI.stage.pName        = "main";
-    cpCI.layout             = m_impl->pipelineLayout;
+    cpCI.layout             = m_pipelineLayout;
 
-    VkResult r = vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &cpCI, nullptr, &m_impl->pipeline);
+    VkResult r = vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &cpCI, nullptr, &m_pipeline);
     vkDestroyShaderModule(dev, shaderModule, nullptr);
     if (r != VK_SUCCESS)
         throw std::runtime_error("FrustumCullPass: vkCreateComputePipelines failed");
 
     // ── GPU buffers ──────────────────────────────────────────────────────────
-    const VkDeviceSize inputSize    = sizeof(CullObject) * m_impl->maxDrawCalls;
-    const VkDeviceSize indirectSize = sizeof(VkDrawIndexedIndirectCommand) * m_impl->maxDrawCalls;
-    const VkDeviceSize countSize    = sizeof(uint32_t) * m_impl->maxDrawCalls;
+    const VkDeviceSize inputSize    = sizeof(CullObject) * m_maxDrawCalls;
+    const VkDeviceSize indirectSize = sizeof(VkDrawIndexedIndirectCommand) * m_maxDrawCalls;
+    const VkDeviceSize countSize    = sizeof(uint32_t) * m_maxDrawCalls;
 
-    m_impl->inputSSBO.Create(dev, m_impl->physDevice, inputSize,
+    m_inputSSBO.Create(dev, m_physDevice, inputSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-    m_impl->indirectBuffer.Create(dev, m_impl->physDevice, indirectSize,
+    m_indirectBuffer.Create(dev, m_physDevice, indirectSize,
         VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-    m_impl->countBuffer.Create(dev, m_impl->physDevice, countSize,
+    m_countBuffer.Create(dev, m_physDevice, countSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
         | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
         | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -194,18 +171,18 @@ void FrustumCullPass::Build(const BuildPassInfo& info)
 
     // ── Update descriptor set ────────────────────────────────────────────────
     std::array<VkDescriptorBufferInfo, 2> bufInfos{};
-    bufInfos[0].buffer = m_impl->inputSSBO.Buffer();
+    bufInfos[0].buffer = m_inputSSBO.Buffer();
     bufInfos[0].offset = 0;
     bufInfos[0].range  = inputSize;
 
-    bufInfos[1].buffer = m_impl->countBuffer.Buffer();
+    bufInfos[1].buffer = m_countBuffer.Buffer();
     bufInfos[1].offset = 0;
     bufInfos[1].range  = countSize;
 
     std::array<VkWriteDescriptorSet, 2> writes{};
     for (int i = 0; i < 2; ++i) {
         writes[i].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[i].dstSet          = m_impl->descriptorSet;
+        writes[i].dstSet          = m_descriptorSet;
         writes[i].dstBinding      = static_cast<uint32_t>(i);
         writes[i].descriptorCount = 1;
         writes[i].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -222,7 +199,7 @@ void FrustumCullPass::Rebuild(DeviceContext&, VkExtent2D)
 void FrustumCullPass::Record(VkCommandBuffer cmd, PassContext& ctx)
 {
     const uint32_t n = static_cast<uint32_t>(ctx.directDrawCalls.size());
-    if (n == 0 || n > m_impl->maxDrawCalls) return;
+    if (n == 0 || n > m_maxDrawCalls) return;
 
     // ── Upload input SSBO (world-space AABBs) ────────────────────────────────
     {
@@ -231,7 +208,7 @@ void FrustumCullPass::Record(VkCommandBuffer cmd, PassContext& ctx)
             objects[i].aabbMin = glm::vec4(ctx.directDrawCalls[i].aabbMin, 0.f);
             objects[i].aabbMax = glm::vec4(ctx.directDrawCalls[i].aabbMax, 0.f);
         }
-        m_impl->inputSSBO.WriteHostVisible(objects.data(),
+        m_inputSSBO.WriteHostVisible(objects.data(),
                                            static_cast<VkDeviceSize>(sizeof(CullObject) * n));
     }
 
@@ -245,12 +222,12 @@ void FrustumCullPass::Record(VkCommandBuffer cmd, PassContext& ctx)
             cmds[i].vertexOffset  = 0;
             cmds[i].firstInstance = 0;
         }
-        m_impl->indirectBuffer.WriteHostVisible(cmds.data(),
+        m_indirectBuffer.WriteHostVisible(cmds.data(),
             static_cast<VkDeviceSize>(sizeof(VkDrawIndexedIndirectCommand) * n));
     }
 
     // ── Reset count buffer to zero via transfer ──────────────────────────────
-    vkCmdFillBuffer(cmd, m_impl->countBuffer.Buffer(), 0,
+    vkCmdFillBuffer(cmd, m_countBuffer.Buffer(), 0,
                     static_cast<VkDeviceSize>(sizeof(uint32_t) * n), 0u);
 
     // ── Barrier: transfer write → compute shader read/write ─────────────────
@@ -266,16 +243,16 @@ void FrustumCullPass::Record(VkCommandBuffer cmd, PassContext& ctx)
     }
 
     // ── Dispatch compute ─────────────────────────────────────────────────────
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_impl->pipeline);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                            m_impl->pipelineLayout, 0, 1, &m_impl->descriptorSet,
+                            m_pipelineLayout, 0, 1, &m_descriptorSet,
                             0, nullptr);
 
     const auto planes = ExtractFrustumPlanes(ctx.viewProj);
     FrustumPushConstants pc{};
     for (int i = 0; i < 6; ++i) pc.planes[i] = planes[i];
     pc.objectCount = n;
-    vkCmdPushConstants(cmd, m_impl->pipelineLayout,
+    vkCmdPushConstants(cmd, m_pipelineLayout,
                        VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
     const uint32_t groups = (n + 63u) / 64u;
@@ -294,27 +271,27 @@ void FrustumCullPass::Record(VkCommandBuffer cmd, PassContext& ctx)
     }
 
     // ── Tell ForwardRenderPass to use indirect path ──────────────────────────
-    ctx.indirectDrawBuffer = m_impl->indirectBuffer.Buffer();
-    ctx.drawCountBuffer    = m_impl->countBuffer.Buffer();
+    ctx.indirectDrawBuffer = m_indirectBuffer.Buffer();
+    ctx.drawCountBuffer    = m_countBuffer.Buffer();
     ctx.indirectDrawCount  = n;
 }
 
 void FrustumCullPass::Destroy(VkDevice device)
 {
-    m_impl->countBuffer.Destroy(device);
-    m_impl->indirectBuffer.Destroy(device);
-    m_impl->inputSSBO.Destroy(device);
+    m_countBuffer.Destroy(device);
+    m_indirectBuffer.Destroy(device);
+    m_inputSSBO.Destroy(device);
 
-    if (m_impl->pipeline      != VK_NULL_HANDLE) vkDestroyPipeline      (device, m_impl->pipeline,      nullptr);
-    if (m_impl->pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(device, m_impl->pipelineLayout, nullptr);
-    if (m_impl->dsPool         != VK_NULL_HANDLE) vkDestroyDescriptorPool(device, m_impl->dsPool,         nullptr);
-    if (m_impl->dsLayout       != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(device, m_impl->dsLayout,  nullptr);
+    if (m_pipeline      != VK_NULL_HANDLE) vkDestroyPipeline      (device, m_pipeline,      nullptr);
+    if (m_pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(device, m_pipelineLayout, nullptr);
+    if (m_dsPool         != VK_NULL_HANDLE) vkDestroyDescriptorPool(device, m_dsPool,         nullptr);
+    if (m_dsLayout       != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(device, m_dsLayout,  nullptr);
 
-    m_impl->pipeline       = VK_NULL_HANDLE;
-    m_impl->pipelineLayout = VK_NULL_HANDLE;
-    m_impl->dsPool         = VK_NULL_HANDLE;
-    m_impl->dsLayout       = VK_NULL_HANDLE;
-    m_impl->descriptorSet  = VK_NULL_HANDLE;
+    m_pipeline       = VK_NULL_HANDLE;
+    m_pipelineLayout = VK_NULL_HANDLE;
+    m_dsPool         = VK_NULL_HANDLE;
+    m_dsLayout       = VK_NULL_HANDLE;
+    m_descriptorSet  = VK_NULL_HANDLE;
 }
 
 } // namespace xcel

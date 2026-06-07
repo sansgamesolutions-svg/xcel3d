@@ -4,29 +4,20 @@
 
 namespace xcel {
 
-struct GpuBuffer::Impl {
-    VkBuffer       buffer = VK_NULL_HANDLE;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    VkDeviceSize   size   = 0;
-    void*          mapped = nullptr;
-};
-
-GpuBuffer::GpuBuffer()
-    : m_impl(std::make_unique<Impl>()) {}
-
-GpuBuffer::~GpuBuffer() = default;
-
 GpuBuffer::GpuBuffer(GpuBuffer&& other) noexcept
-    : m_impl(std::move(other.m_impl))
-{
-    other.m_impl = std::make_unique<Impl>();
-}
+    : m_buffer(std::exchange(other.m_buffer, VK_NULL_HANDLE))
+    , m_memory(std::exchange(other.m_memory, VK_NULL_HANDLE))
+    , m_size(std::exchange(other.m_size, 0))
+    , m_mapped(std::exchange(other.m_mapped, nullptr))
+{}
 
 GpuBuffer& GpuBuffer::operator=(GpuBuffer&& other) noexcept
 {
     if (this != &other) {
-        m_impl = std::move(other.m_impl);
-        other.m_impl = std::make_unique<Impl>();
+        m_buffer = std::exchange(other.m_buffer, VK_NULL_HANDLE);
+        m_memory = std::exchange(other.m_memory, VK_NULL_HANDLE);
+        m_size   = std::exchange(other.m_size, 0);
+        m_mapped = std::exchange(other.m_mapped, nullptr);
     }
     return *this;
 }
@@ -54,7 +45,7 @@ void GpuBuffer::Create(
     VkBufferUsageFlags    usage,
     VkMemoryPropertyFlags memProps)
 {
-    m_impl->size = size;
+    m_size = size;
 
     VkBufferCreateInfo bufInfo{};
     bufInfo.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -62,24 +53,24 @@ void GpuBuffer::Create(
     bufInfo.usage       = usage;
     bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    if (vkCreateBuffer(device, &bufInfo, nullptr, &m_impl->buffer) != VK_SUCCESS)
+    if (vkCreateBuffer(device, &bufInfo, nullptr, &m_buffer) != VK_SUCCESS)
         throw std::runtime_error("GpuBuffer: vkCreateBuffer failed");
 
     VkMemoryRequirements memReq;
-    vkGetBufferMemoryRequirements(device, m_impl->buffer, &memReq);
+    vkGetBufferMemoryRequirements(device, m_buffer, &memReq);
 
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize  = memReq.size;
     allocInfo.memoryTypeIndex = FindMemoryType(physicalDevice, memReq.memoryTypeBits, memProps);
 
-    if (vkAllocateMemory(device, &allocInfo, nullptr, &m_impl->memory) != VK_SUCCESS)
+    if (vkAllocateMemory(device, &allocInfo, nullptr, &m_memory) != VK_SUCCESS)
         throw std::runtime_error("GpuBuffer: vkAllocateMemory failed");
 
-    vkBindBufferMemory(device, m_impl->buffer, m_impl->memory, 0);
+    vkBindBufferMemory(device, m_buffer, m_memory, 0);
 
     if (memProps & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
-        vkMapMemory(device, m_impl->memory, 0, size, 0, &m_impl->mapped);
+        vkMapMemory(device, m_memory, 0, size, 0, &m_mapped);
 }
 
 void GpuBuffer::UploadViaStaging(
@@ -98,7 +89,7 @@ void GpuBuffer::UploadViaStaging(
     VkCommandBuffer cmd = dev.BeginSingleTimeCommands();
     VkBufferCopy copy{};
     copy.size = size;
-    vkCmdCopyBuffer(cmd, staging.Buffer(), m_impl->buffer, 1, &copy);
+    vkCmdCopyBuffer(cmd, staging.Buffer(), m_buffer, 1, &copy);
     dev.EndSingleTimeCommands(cmd);
 
     staging.Destroy(dev.Device());
@@ -106,28 +97,28 @@ void GpuBuffer::UploadViaStaging(
 
 void GpuBuffer::WriteHostVisible(const void* data, VkDeviceSize size)
 {
-    if (m_impl->mapped)
-        std::memcpy(m_impl->mapped, data, static_cast<size_t>(size));
+    if (m_mapped)
+        std::memcpy(m_mapped, data, static_cast<size_t>(size));
 }
 
 void GpuBuffer::Destroy(VkDevice device)
 {
-    if (m_impl->mapped) {
-        vkUnmapMemory(device, m_impl->memory);
-        m_impl->mapped = nullptr;
+    if (m_mapped) {
+        vkUnmapMemory(device, m_memory);
+        m_mapped = nullptr;
     }
-    if (m_impl->buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(device, m_impl->buffer, nullptr);
-        m_impl->buffer = VK_NULL_HANDLE;
+    if (m_buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, m_buffer, nullptr);
+        m_buffer = VK_NULL_HANDLE;
     }
-    if (m_impl->memory != VK_NULL_HANDLE) {
-        vkFreeMemory(device, m_impl->memory, nullptr);
-        m_impl->memory = VK_NULL_HANDLE;
+    if (m_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(device, m_memory, nullptr);
+        m_memory = VK_NULL_HANDLE;
     }
-    m_impl->size = 0;
+    m_size = 0;
 }
 
-VkBuffer     GpuBuffer::Buffer()     const { return m_impl->buffer; }
-VkDeviceSize GpuBuffer::BufferSize() const { return m_impl->size; }
+VkBuffer     GpuBuffer::Buffer()     const { return m_buffer; }
+VkDeviceSize GpuBuffer::BufferSize() const { return m_size; }
 
 } // namespace xcel

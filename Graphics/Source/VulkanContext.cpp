@@ -39,22 +39,9 @@ static void DestroyDebugMessenger(
     if (fn) fn(instance, messenger, pAllocator);
 }
 
-struct VulkanContext::Impl
-{
-    VkInstance               instance          = VK_NULL_HANDLE;
-    VkDebugUtilsMessengerEXT debugMessenger    = VK_NULL_HANDLE;
-    VkSurfaceKHR             surface           = VK_NULL_HANDLE;
-    bool                     validationEnabled = false;
-    std::vector<std::unique_ptr<DeviceContext>> devices;
-};
 
-VulkanContext::VulkanContext()
-    : m_impl(std::make_unique<Impl>()) {}
 
-VulkanContext::~VulkanContext()
-{
-    Destroy();
-}
+
 
 VKAPI_ATTR VkBool32 VKAPI_CALL VulkanContext::DebugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT    severity,
@@ -102,7 +89,7 @@ void VulkanContext::CreateInstance(IWindowWidget& widget, bool enableValidation)
         createInfo.pNext          = &debugInfo;
     }
 
-    if (vkCreateInstance(&createInfo, nullptr, &m_impl->instance) != VK_SUCCESS)
+    if (vkCreateInstance(&createInfo, nullptr, &m_instance) != VK_SUCCESS)
         throw std::runtime_error("VulkanContext: vkCreateInstance failed");
 }
 
@@ -117,13 +104,13 @@ void VulkanContext::SetupDebugMessenger()
                          | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     info.pfnUserCallback = DebugCallback;
 
-    if (CreateDebugMessenger(m_impl->instance, &info, nullptr, &m_impl->debugMessenger) != VK_SUCCESS)
+    if (CreateDebugMessenger(m_instance, &info, nullptr, &m_debugMessenger) != VK_SUCCESS)
         throw std::runtime_error("VulkanContext: failed to create debug messenger");
 }
 
 void VulkanContext::CreateSurface(IWindowWidget& widget)
 {
-    m_impl->surface = widget.CreateVulkanSurface(m_impl->instance);
+    m_surface = widget.CreateVulkanSurface(m_instance);
 }
 
 bool VulkanContext::IsDeviceSuitable(VkPhysicalDevice dev) const
@@ -146,7 +133,7 @@ bool VulkanContext::IsDeviceSuitable(VkPhysicalDevice dev) const
     for (uint32_t i = 0; i < qCount; ++i) {
         if (qFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) hasGraphics = true;
         VkBool32 presentSupport = VK_FALSE;
-        vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, m_impl->surface, &presentSupport);
+        vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, m_surface, &presentSupport);
         if (presentSupport) hasPresent = true;
     }
     return hasGraphics && hasPresent;
@@ -155,12 +142,12 @@ bool VulkanContext::IsDeviceSuitable(VkPhysicalDevice dev) const
 void VulkanContext::EnumerateDevices(bool enableValidation)
 {
     uint32_t count = 0;
-    vkEnumeratePhysicalDevices(m_impl->instance, &count, nullptr);
+    vkEnumeratePhysicalDevices(m_instance, &count, nullptr);
     if (count == 0)
         throw std::runtime_error("VulkanContext: no Vulkan-capable GPU found");
 
     std::vector<VkPhysicalDevice> all(count);
-    vkEnumeratePhysicalDevices(m_impl->instance, &count, all.data());
+    vkEnumeratePhysicalDevices(m_instance, &count, all.data());
 
     std::vector<VkPhysicalDevice> suitable;
     suitable.reserve(count);
@@ -182,17 +169,17 @@ void VulkanContext::EnumerateDevices(bool enableValidation)
         return score(a) > score(b);
     });
 
-    m_impl->devices.reserve(suitable.size());
+    m_devices.reserve(suitable.size());
     for (auto dev : suitable) {
         auto ctx = std::make_unique<DeviceContext>();
-        ctx->Create(dev, m_impl->surface, enableValidation);
-        m_impl->devices.push_back(std::move(ctx));
+        ctx->Create(dev, m_surface, enableValidation);
+        m_devices.push_back(std::move(ctx));
     }
 }
 
 void VulkanContext::Init(IWindowWidget& widget, bool enableValidation)
 {
-    m_impl->validationEnabled = enableValidation;
+    m_validationEnabled = enableValidation;
     CreateInstance(widget, enableValidation);
     if (enableValidation) SetupDebugMessenger();
     CreateSurface(widget);
@@ -201,29 +188,31 @@ void VulkanContext::Init(IWindowWidget& widget, bool enableValidation)
 
 void VulkanContext::Destroy()
 {
-    m_impl->devices.clear();
-    if (m_impl->surface != VK_NULL_HANDLE) {
-        vkDestroySurfaceKHR(m_impl->instance, m_impl->surface, nullptr);
-        m_impl->surface = VK_NULL_HANDLE;
+    for (auto& dev : m_devices)
+        dev->Destroy();
+    m_devices.clear();
+    if (m_surface != VK_NULL_HANDLE) {
+        vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+        m_surface = VK_NULL_HANDLE;
     }
-    if (m_impl->debugMessenger != VK_NULL_HANDLE) {
-        DestroyDebugMessenger(m_impl->instance, m_impl->debugMessenger, nullptr);
-        m_impl->debugMessenger = VK_NULL_HANDLE;
+    if (m_debugMessenger != VK_NULL_HANDLE) {
+        DestroyDebugMessenger(m_instance, m_debugMessenger, nullptr);
+        m_debugMessenger = VK_NULL_HANDLE;
     }
-    if (m_impl->instance != VK_NULL_HANDLE) {
-        vkDestroyInstance(m_impl->instance, nullptr);
-        m_impl->instance = VK_NULL_HANDLE;
+    if (m_instance != VK_NULL_HANDLE) {
+        vkDestroyInstance(m_instance, nullptr);
+        m_instance = VK_NULL_HANDLE;
     }
 }
 
-VkInstance   VulkanContext::Instance() const { return m_impl->instance; }
-VkSurfaceKHR VulkanContext::Surface()  const { return m_impl->surface;  }
+VkInstance   VulkanContext::Instance() const { return m_instance; }
+VkSurfaceKHR VulkanContext::Surface()  const { return m_surface;  }
 
-size_t VulkanContext::DeviceCount() const { return m_impl->devices.size(); }
+size_t VulkanContext::DeviceCount() const { return m_devices.size(); }
 
 DeviceContext& VulkanContext::Device(size_t i) const
 {
-    return *m_impl->devices.at(i);
+    return *m_devices.at(i);
 }
 
 DeviceContext& VulkanContext::PrimaryDevice() const
@@ -233,7 +222,7 @@ DeviceContext& VulkanContext::PrimaryDevice() const
 
 DeviceContext* VulkanContext::FindDevice(std::function<bool(const DeviceContext&)> pred) const
 {
-    for (auto& d : m_impl->devices)
+    for (auto& d : m_devices)
         if (pred(*d)) return d.get();
     return nullptr;
 }

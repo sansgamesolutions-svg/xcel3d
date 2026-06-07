@@ -4,15 +4,6 @@
 
 namespace xcel {
 
-struct RenderPass::Impl {
-    VkRenderPass renderPass = VK_NULL_HANDLE;
-};
-
-RenderPass::RenderPass()
-    : m_impl(std::make_unique<Impl>()) {}
-
-RenderPass::~RenderPass() = default;
-
 void RenderPass::Create(VkDevice device, VkFormat colorFormat, VkFormat depthFormat)
 {
     VkAttachmentDescription colorAttachment{};
@@ -71,18 +62,18 @@ void RenderPass::Create(VkDevice device, VkFormat colorFormat, VkFormat depthFor
     info.dependencyCount = 1;
     info.pDependencies   = &dependency;
 
-    if (vkCreateRenderPass(device, &info, nullptr, &m_impl->renderPass) != VK_SUCCESS)
+    if (vkCreateRenderPass(device, &info, nullptr, &m_renderPass) != VK_SUCCESS)
         throw std::runtime_error("RenderPass: vkCreateRenderPass failed");
 }
 
 void RenderPass::Destroy(VkDevice device)
 {
-    if (m_impl->renderPass != VK_NULL_HANDLE) {
-        vkDestroyRenderPass(device, m_impl->renderPass, nullptr);
-        m_impl->renderPass = VK_NULL_HANDLE;
+    if (m_renderPass != VK_NULL_HANDLE) {
+        vkDestroyRenderPass(device, m_renderPass, nullptr);
+        m_renderPass = VK_NULL_HANDLE;
     }
 }
 
-VkRenderPass RenderPass::GetHandle() const { return m_impl->renderPass; }
+VkRenderPass RenderPass::GetHandle() const { return m_renderPass; }
 
 } // namespace xcel

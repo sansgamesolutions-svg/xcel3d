@@ -1,22 +1,18 @@
 #pragma once
 #include "Graphics/DeviceContext.h"
-#include <memory>
 #include <functional>
+#include <memory>
 #include <vector>
 
 namespace xcel {
 
 class IWindowWidget;
 
-// Owns the Vulkan instance tier: VkInstance, VkDebugUtilsMessengerEXT,
-// VkSurfaceKHR, and the ranked vector of DeviceContexts.
-// RAII: Destroy() is called by the destructor, so explicit Destroy() calls
-// in Cleanup() are safe (all handles are guarded against double-free).
 class VulkanContext
 {
 public:
-    VulkanContext();
-    ~VulkanContext();
+    VulkanContext()  = default;
+    ~VulkanContext() = default;
 
     VulkanContext(const VulkanContext&)            = delete;
     VulkanContext& operator=(const VulkanContext&) = delete;
@@ -29,7 +25,7 @@ public:
 
     size_t         DeviceCount()  const;
     DeviceContext& Device(size_t i) const;
-    DeviceContext& PrimaryDevice() const;  // Device(0)
+    DeviceContext& PrimaryDevice() const;
     DeviceContext* FindDevice(std::function<bool(const DeviceContext&)> pred) const;
 
 private:
@@ -45,8 +41,11 @@ private:
         const VkDebugUtilsMessengerCallbackDataEXT* pData,
         void*                                     pUserData);
 
-    struct Impl;
-    std::unique_ptr<Impl> m_impl;
+    VkInstance               m_instance          = VK_NULL_HANDLE;
+    VkDebugUtilsMessengerEXT m_debugMessenger    = VK_NULL_HANDLE;
+    VkSurfaceKHR             m_surface           = VK_NULL_HANDLE;
+    bool                     m_validationEnabled = false;
+    std::vector<std::unique_ptr<DeviceContext>> m_devices;
 };
 
 } // namespace xcel

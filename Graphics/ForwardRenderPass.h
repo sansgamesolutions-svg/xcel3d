@@ -1,22 +1,20 @@
 #pragma once
 #include "Graphics/IPass.h"
-#include <memory>
+#include "Graphics/RenderPass.h"
+#include "Graphics/Pipeline.h"
+#include <string>
 
 namespace xcel {
 
-// Owns the forward VkRenderPass and graphics Pipeline.
-// Must call CreateRenderPass() before the Swapchain is created so its
-// VkRenderPass handle can be used for framebuffer creation.
 class ForwardRenderPass final : public IPass
 {
 public:
-    ForwardRenderPass();
-    ~ForwardRenderPass() override;
+    ForwardRenderPass()  = default;
+    ~ForwardRenderPass() = default;
 
     ForwardRenderPass(const ForwardRenderPass&)            = delete;
     ForwardRenderPass& operator=(const ForwardRenderPass&) = delete;
 
-    // Phase 1 of construction: creates the VkRenderPass before Swapchain framebuffers are bound.
     void         CreateRenderPass(DeviceContext& dev, VkFormat colorFormat, VkFormat depthFormat);
     VkRenderPass GetRenderPass() const;
 
@@ -26,8 +24,10 @@ public:
     void Destroy(VkDevice)                     override;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> m_impl;
+    RenderPass            m_renderPass;
+    Pipeline              m_pipeline;
+    VkDescriptorSetLayout m_descriptorLayout = VK_NULL_HANDLE;
+    std::string           m_shaderDir;
 };
 
 } // namespace xcel

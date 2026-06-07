@@ -16,24 +16,6 @@ static const std::vector<const char*> kValidationLayers = {
 
 // â”€â”€ Impl â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-struct DeviceContext::Impl {
-    VkPhysicalDevice           physicalDevice    = VK_NULL_HANDLE;
-    VkDevice                   device            = VK_NULL_HANDLE;
-    VkPhysicalDeviceProperties properties        = {};
-    bool                       validationEnabled = false;
-
-    struct QueueSlot {
-        uint32_t      familyIndex = UINT32_MAX;
-        VkQueue       queue       = VK_NULL_HANDLE;
-        VkCommandPool commandPool = VK_NULL_HANDLE; // VK_NULL_HANDLE for present slot
-    };
-
-    std::optional<QueueSlot> graphics;
-    std::optional<QueueSlot> compute;
-    std::optional<QueueSlot> present;  // commandPool is always VK_NULL_HANDLE
-    std::optional<QueueSlot> transfer;
-};
-
 // â”€â”€ Internal queue-family search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 struct QueueSearch {
@@ -84,18 +66,14 @@ static QueueSearch FindQueueFamilies(VkPhysicalDevice dev, VkSurfaceKHR surface)
 
 // â”€â”€ Construction / destruction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-DeviceContext::DeviceContext()
-    : m_impl(std::make_unique<Impl>()) {}
-
-DeviceContext::~DeviceContext() { Destroy(); }
 
 // â”€â”€ Create / Destroy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 void DeviceContext::Create(VkPhysicalDevice physDev, VkSurfaceKHR surface, bool enableValidation)
 {
-    m_impl->physicalDevice    = physDev;
-    m_impl->validationEnabled = enableValidation;
-    vkGetPhysicalDeviceProperties(physDev, &m_impl->properties);
+    m_physicalDevice    = physDev;
+    m_validationEnabled = enableValidation;
+    vkGetPhysicalDeviceProperties(physDev, &m_properties);
 
     auto families = FindQueueFamilies(physDev, surface);
 
@@ -131,95 +109,95 @@ void DeviceContext::Create(VkPhysicalDevice physDev, VkSurfaceKHR surface, bool 
         createInfo.ppEnabledLayerNames = kValidationLayers.data();
     }
 
-    if (vkCreateDevice(physDev, &createInfo, nullptr, &m_impl->device) != VK_SUCCESS)
+    if (vkCreateDevice(physDev, &createInfo, nullptr, &m_device) != VK_SUCCESS)
         throw std::runtime_error("DeviceContext: vkCreateDevice failed");
 
     // Each supported queue type gets its own slot (and its own command pool)
-    auto makeSlot = [this](uint32_t family) -> Impl::QueueSlot {
-        Impl::QueueSlot slot;
+    auto makeSlot = [this](uint32_t family) -> QueueSlot {
+        QueueSlot slot;
         slot.familyIndex = family;
-        vkGetDeviceQueue(m_impl->device, family, 0, &slot.queue);
+        vkGetDeviceQueue(m_device, family, 0, &slot.queue);
 
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolInfo.queueFamilyIndex = family;
         poolInfo.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        if (vkCreateCommandPool(m_impl->device, &poolInfo, nullptr, &slot.commandPool) != VK_SUCCESS)
+        if (vkCreateCommandPool(m_device, &poolInfo, nullptr, &slot.commandPool) != VK_SUCCESS)
             throw std::runtime_error("DeviceContext: vkCreateCommandPool failed");
         return slot;
     };
 
-    if (families.graphics) m_impl->graphics = makeSlot(*families.graphics);
-    if (families.compute)  m_impl->compute  = makeSlot(*families.compute);
-    if (families.transfer) m_impl->transfer = makeSlot(*families.transfer);
+    if (families.graphics) m_graphics = makeSlot(*families.graphics);
+    if (families.compute)  m_compute  = makeSlot(*families.compute);
+    if (families.transfer) m_transfer = makeSlot(*families.transfer);
 
     // Present slot: queue handle only â€” present operations need no command pool
     if (families.present) {
-        Impl::QueueSlot slot;
+        QueueSlot slot;
         slot.familyIndex = *families.present;
-        vkGetDeviceQueue(m_impl->device, *families.present, 0, &slot.queue);
-        m_impl->present = slot;
+        vkGetDeviceQueue(m_device, *families.present, 0, &slot.queue);
+        m_present = slot;
     }
 }
 
 void DeviceContext::Destroy()
 {
-    if (m_impl->device == VK_NULL_HANDLE) return;
+    if (m_device == VK_NULL_HANDLE) return;
 
-    auto destroyPool = [this](std::optional<Impl::QueueSlot>& slot) {
+    auto destroyPool = [this](std::optional<QueueSlot>& slot) {
         if (slot && slot->commandPool != VK_NULL_HANDLE) {
-            vkDestroyCommandPool(m_impl->device, slot->commandPool, nullptr);
+            vkDestroyCommandPool(m_device, slot->commandPool, nullptr);
             slot->commandPool = VK_NULL_HANDLE;
         }
     };
-    destroyPool(m_impl->graphics);
-    destroyPool(m_impl->compute);
-    destroyPool(m_impl->transfer);
+    destroyPool(m_graphics);
+    destroyPool(m_compute);
+    destroyPool(m_transfer);
     // present slot has no pool
 
-    vkDestroyDevice(m_impl->device, nullptr);
-    m_impl->device = VK_NULL_HANDLE;
+    vkDestroyDevice(m_device, nullptr);
+    m_device = VK_NULL_HANDLE;
 }
 
 // â”€â”€ Capability queries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-bool DeviceContext::SupportsGraphics() const { return m_impl->graphics.has_value(); }
-bool DeviceContext::SupportsCompute()  const { return m_impl->compute.has_value();  }
-bool DeviceContext::SupportsPresent()  const { return m_impl->present.has_value();  }
-bool DeviceContext::SupportsTransfer() const { return m_impl->transfer.has_value(); }
+bool DeviceContext::SupportsGraphics() const { return m_graphics.has_value(); }
+bool DeviceContext::SupportsCompute()  const { return m_compute.has_value();  }
+bool DeviceContext::SupportsPresent()  const { return m_present.has_value();  }
+bool DeviceContext::SupportsTransfer() const { return m_transfer.has_value(); }
 
 // â”€â”€ Core handles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-VkPhysicalDevice DeviceContext::PhysicalDevice() const { return m_impl->physicalDevice; }
-VkDevice         DeviceContext::Device()         const { return m_impl->device; }
+VkPhysicalDevice DeviceContext::PhysicalDevice() const { return m_physicalDevice; }
+VkDevice         DeviceContext::Device()         const { return m_device; }
 
 // â”€â”€ Queue accessors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-VkQueue DeviceContext::GraphicsQueue()  const { return m_impl->graphics.value().queue; }
-VkQueue DeviceContext::ComputeQueue()   const { return m_impl->compute.value().queue;  }
-VkQueue DeviceContext::PresentQueue()   const { return m_impl->present.value().queue;  }
-VkQueue DeviceContext::TransferQueue()  const { return m_impl->transfer.value().queue; }
+VkQueue DeviceContext::GraphicsQueue()  const { return m_graphics.value().queue; }
+VkQueue DeviceContext::ComputeQueue()   const { return m_compute.value().queue;  }
+VkQueue DeviceContext::PresentQueue()   const { return m_present.value().queue;  }
+VkQueue DeviceContext::TransferQueue()  const { return m_transfer.value().queue; }
 
 // â”€â”€ Command pool accessors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-VkCommandPool DeviceContext::GraphicsCommandPool() const { return m_impl->graphics.value().commandPool; }
-VkCommandPool DeviceContext::ComputeCommandPool()  const { return m_impl->compute.value().commandPool;  }
-VkCommandPool DeviceContext::TransferCommandPool() const { return m_impl->transfer.value().commandPool; }
+VkCommandPool DeviceContext::GraphicsCommandPool() const { return m_graphics.value().commandPool; }
+VkCommandPool DeviceContext::ComputeCommandPool()  const { return m_compute.value().commandPool;  }
+VkCommandPool DeviceContext::TransferCommandPool() const { return m_transfer.value().commandPool; }
 
 // â”€â”€ Family index accessors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-uint32_t DeviceContext::GraphicsFamily() const { return m_impl->graphics.value().familyIndex; }
-uint32_t DeviceContext::ComputeFamily()  const { return m_impl->compute.value().familyIndex;  }
-uint32_t DeviceContext::PresentFamily()  const { return m_impl->present.value().familyIndex;  }
-uint32_t DeviceContext::TransferFamily() const { return m_impl->transfer.value().familyIndex; }
+uint32_t DeviceContext::GraphicsFamily() const { return m_graphics.value().familyIndex; }
+uint32_t DeviceContext::ComputeFamily()  const { return m_compute.value().familyIndex;  }
+uint32_t DeviceContext::PresentFamily()  const { return m_present.value().familyIndex;  }
+uint32_t DeviceContext::TransferFamily() const { return m_transfer.value().familyIndex; }
 
 // â”€â”€ Device metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const VkPhysicalDeviceProperties& DeviceContext::Properties() const { return m_impl->properties; }
+const VkPhysicalDeviceProperties& DeviceContext::Properties() const { return m_properties; }
 
 int DeviceContext::Score() const
 {
-    switch (m_impl->properties.deviceType) {
+    switch (m_properties.deviceType) {
     case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:   return 1000;
     case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return  100;
     default:                                     return    1;
@@ -246,7 +224,7 @@ VkCommandBuffer DeviceContext::BeginSingleTimeCommands(QueueType type)
     allocInfo.commandBufferCount = 1;
 
     VkCommandBuffer cmd = VK_NULL_HANDLE;
-    vkAllocateCommandBuffers(m_impl->device, &allocInfo, &cmd);
+    vkAllocateCommandBuffers(m_device, &allocInfo, &cmd);
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -274,7 +252,7 @@ void DeviceContext::EndSingleTimeCommands(VkCommandBuffer cmd, QueueType type)
 
     vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
     vkQueueWaitIdle(queue);
-    vkFreeCommandBuffers(m_impl->device, pool, 1, &cmd);
+    vkFreeCommandBuffers(m_device, pool, 1, &cmd);
 }
 
 } // namespace xcel

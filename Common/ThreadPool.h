@@ -1,12 +1,17 @@
 #pragma once
+#include <condition_variable>
 #include <functional>
 #include <future>
-#include <memory>
+#include <mutex>
+#include <queue>
+#include <thread>
 #include <type_traits>
+#include <vector>
 
 namespace xcel {
 
-class ThreadPool {
+class ThreadPool
+{
 public:
     explicit ThreadPool(size_t threadCount = 0); // 0 → hardware_concurrency
     ~ThreadPool();
@@ -40,8 +45,13 @@ public:
 private:
     void Enqueue(std::function<void()> task);
 
-    struct Impl;
-    std::unique_ptr<Impl> m_impl;
+    std::vector<std::thread>          m_workers;
+    std::queue<std::function<void()>> m_tasks;
+    std::mutex                        m_mutex;
+    std::condition_variable           m_workCv;
+    std::condition_variable           m_completeCv;
+    size_t                            m_pendingTasks = 0;
+    bool                              m_stopping     = false;
 };
 
 } // namespace xcel

@@ -2,36 +2,35 @@
 #include "Graphics/DeviceContext.h"
 #include "Graphics/DescriptorManager.h"
 #include "Graphics/DrawCall.h"
-#include <memory>
+#include <vector>
 #include <span>
 
 namespace xcel {
 
 class Pipeline;
 
-class CommandRecorder {
+class CommandRecorder
+{
 public:
-    CommandRecorder();
-    ~CommandRecorder();
+    CommandRecorder()  = default;
+    ~CommandRecorder() = default;
 
     void Create(DeviceContext& dev);
     void Destroy(VkDevice device);
 
     void Record(
-        uint32_t                frameIndex,
-        VkFramebuffer           framebuffer,
-        VkExtent2D              extent,
-        VkRenderPass            renderPass,
-        Pipeline&               pipeline,
-        DescriptorManager&      descriptors,
-        std::span<const DrawCall> drawCalls
-    );
+        uint32_t                  frameIndex,
+        VkFramebuffer             framebuffer,
+        VkExtent2D                extent,
+        VkRenderPass              renderPass,
+        Pipeline&                 pipeline,
+        DescriptorManager&        descriptors,
+        std::span<const DrawCall> drawCalls);
 
     const VkCommandBuffer& CommandBuffer(uint32_t i) const;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> m_impl;
+    std::vector<VkCommandBuffer> m_cmdBuffers;
 };
 
 } // namespace xcel

@@ -1,14 +1,13 @@
 #pragma once
 #include "Graphics/DeviceContext.h"
-#include <cstddef>
-#include <memory>
 
 namespace xcel {
 
-class GpuBuffer {
+class GpuBuffer
+{
 public:
-    GpuBuffer();
-    ~GpuBuffer();
+    GpuBuffer()  = default;
+    ~GpuBuffer() = default;
 
     GpuBuffer(const GpuBuffer&)            = delete;
     GpuBuffer& operator=(const GpuBuffer&) = delete;
@@ -20,33 +19,24 @@ public:
         VkPhysicalDevice      physicalDevice,
         VkDeviceSize          size,
         VkBufferUsageFlags    usage,
-        VkMemoryPropertyFlags memProps
-    );
+        VkMemoryPropertyFlags memProps);
 
-    // Upload data through a temporary host-visible staging buffer.
-    void UploadViaStaging(
-        DeviceContext& dev,
-        const void*    data,
-        VkDeviceSize   size
-    );
-
-    // Direct write for persistently mapped host-visible buffers (UBOs).
+    void UploadViaStaging(DeviceContext& dev, const void* data, VkDeviceSize size);
     void WriteHostVisible(const void* data, VkDeviceSize size);
-
     void Destroy(VkDevice device);
 
     VkBuffer     Buffer()     const;
     VkDeviceSize BufferSize() const;
 
 private:
-    uint32_t FindMemoryType(
-        VkPhysicalDevice      physicalDevice,
-        uint32_t              typeFilter,
-        VkMemoryPropertyFlags properties
-    );
+    uint32_t FindMemoryType(VkPhysicalDevice physicalDevice,
+                            uint32_t         typeFilter,
+                            VkMemoryPropertyFlags properties);
 
-    struct Impl;
-    std::unique_ptr<Impl> m_impl;
+    VkBuffer       m_buffer = VK_NULL_HANDLE;
+    VkDeviceMemory m_memory = VK_NULL_HANDLE;
+    VkDeviceSize   m_size   = 0;
+    void*          m_mapped = nullptr;
 };
 
 } // namespace xcel

@@ -8,27 +8,14 @@
 
 namespace xcel {
 
-struct BatchingSystem::Impl {
-    flecs::world*  world         = nullptr;
-    DeviceContext* dev           = nullptr;
-    uint64_t       pageCapacity  = 0;
-    uint32_t       pageCount     = 0;
-
-    std::vector<flecs::entity>   pending;    // registered before BuildAll
-    std::unordered_set<uint64_t> dirtyPages; // page entity ids needing rebuild
-};
-
 BatchingSystem::BatchingSystem(uint64_t pageCapacityBytes)
-    : m_impl(std::make_unique<Impl>())
-{
-    m_impl->pageCapacity = pageCapacityBytes;
+    {
+    m_pageCapacity = pageCapacityBytes;
 }
-
-BatchingSystem::~BatchingSystem() = default;
 
 void BatchingSystem::Register(flecs::entity meshEntity)
 {
-    m_impl->pending.push_back(meshEntity);
+    m_pending.push_back(meshEntity);
 }
 
 // ── Byte budget estimation ────────────────────────────────────────────────────
@@ -90,7 +77,7 @@ flecs::entity BatchingSystem::FindOrCreatePage(
     if (found.is_valid()) return found;
 
     std::string name = std::string("page_") + PrimitiveTypeName(type)
-                     + "_" + std::to_string(m_impl->pageCount++);
+                     + "_" + std::to_string(m_pageCount++);
 
     auto bd = std::make_shared<BatchDrawable>();
 
@@ -98,7 +85,7 @@ flecs::entity BatchingSystem::FindOrCreatePage(
         .set<NameComponent>({name})
         .set<MeshComponent>({std::move(bd)})
         .set<VisibilityComponent>({true})
-        .set<PageMetaComponent>({type, m_impl->pageCapacity, 0});
+        .set<PageMetaComponent>({type, m_pageCapacity, 0});
 
     return page;
 }
@@ -110,11 +97,11 @@ void BatchingSystem::BuildAll(
     DeviceContext& dev,
     ThreadPool*    pool)
 {
-    m_impl->world = &world;
-    m_impl->dev   = &dev;
+    m_world = &world;
+    m_dev   = &dev;
 
     // Assign each registered mesh entity to page(s) by PrimitiveType.
-    for (flecs::entity e : m_impl->pending) {
+    for (flecs::entity e : m_pending) {
         const PrimitiveSetsComponent* psc = e.get<PrimitiveSetsComponent>();
         if (!psc) continue;
 
@@ -131,7 +118,7 @@ void BatchingSystem::BuildAll(
             if (meta) meta->usedBytes += bytes;
         }
     }
-    m_impl->pending.clear();
+    m_pending.clear();
 
     // Build GPU buffers for all pages.
     world.each([&](flecs::entity e, const PageMetaComponent&) {
@@ -144,7 +131,7 @@ void BatchingSystem::BuildAll(
         .each([this](flecs::entity e, const VisibilityComponent&) {
             if (!e.has<PrimitiveSetsComponent>()) return;
             e.each<BelongsToPage>([this](flecs::entity page) {
-                m_impl->dirtyPages.insert(page.id());
+                m_dirtyPages.insert(page.id());
             });
         });
 }
@@ -164,7 +151,7 @@ void BatchingSystem::RebuildPage(flecs::entity pageEntity, ThreadPool* pool)
 
     std::vector<MeshTessellationInput> inputs;
 
-    m_impl->world->each([&](flecs::entity e,
+    m_world->each([&](flecs::entity e,
                               const PrimitiveSetsComponent& psc,
                               const VisibilityComponent&    vc) {
         if (!vc.visible || !e.has<BelongsToPage>(pageEntity)) return;
@@ -187,21 +174,21 @@ void BatchingSystem::RebuildPage(flecs::entity pageEntity, ThreadPool* pool)
         }
     });
 
-    bd->Rebuild(*m_impl->dev, inputs, pool);
+    bd->Rebuild(*m_dev, inputs, pool);
 }
 
 // ── FlushRebuild ──────────────────────────────────────────────────────────────
 
 void BatchingSystem::FlushRebuild(ThreadPool* pool)
 {
-    if (m_impl->dirtyPages.empty() || !m_impl->world) return;
+    if (m_dirtyPages.empty() || !m_world) return;
 
-    for (uint64_t id : m_impl->dirtyPages) {
-        flecs::entity page(*m_impl->world, id);
+    for (uint64_t id : m_dirtyPages) {
+        flecs::entity page(*m_world, id);
         if (page.is_valid())
             RebuildPage(page, pool);
     }
-    m_impl->dirtyPages.clear();
+    m_dirtyPages.clear();
 }
 
 } // namespace xcel

@@ -12,15 +12,8 @@ namespace xcel {
 
 World* World::s_instance = nullptr;
 
-struct World::Impl
-{
-    flecs::world  ecs;
-    BatchingSystem batchingSystem;
-};
-
 World::World()
-    : m_impl(std::make_unique<Impl>())
-{
+    {
     assert(s_instance == nullptr && "Only one World may be alive at a time");
     s_instance = this;
 }
@@ -42,7 +35,7 @@ Entity World::AddMesh(const std::string&                         name,
                       std::shared_ptr<ColorTable>                colorTable,
                       std::vector<std::shared_ptr<PrimitiveSet>> primSets)
 {
-    flecs::entity e = m_impl->ecs.entity()
+    flecs::entity e = m_ecs.entity()
         .set<NameComponent>({name})
         .set<CoordTableComponent>({std::move(coords)})
         .set<ScalarTableComponent>({std::move(scalars)})
@@ -51,7 +44,7 @@ Entity World::AddMesh(const std::string&                         name,
         .set<TransformComponent>({})
         .set<VisibilityComponent>({});
 
-    m_impl->batchingSystem.Register(e);
+    m_batchingSystem.Register(e);
     return e;
 }
 
@@ -61,7 +54,7 @@ Entity World::AddInstanceMesh(const std::string&                         name,
                                std::shared_ptr<ColorTable>                colorTable,
                                std::vector<std::shared_ptr<PrimitiveSet>> primSets)
 {
-    flecs::entity e = m_impl->ecs.entity()
+    flecs::entity e = m_ecs.entity()
         .set<NameComponent>({name})
         .set<CoordTableComponent>({std::move(coords)})
         .set<ScalarTableComponent>({std::move(scalars)})
@@ -75,7 +68,7 @@ Entity World::AddInstanceMesh(const std::string&                         name,
 
 Entity World::AddInstance(Entity templateEntity, const glm::mat4& transform)
 {
-    return m_impl->ecs.entity()
+    return m_ecs.entity()
         .set<TransformComponent>({transform})
         .set<VisibilityComponent>({true})
         .add<InstanceOf>(static_cast<flecs::entity>(templateEntity));
@@ -83,17 +76,17 @@ Entity World::AddInstance(Entity templateEntity, const glm::mat4& transform)
 
 flecs::world& World::Ecs()
 {
-    return m_impl->ecs;
+    return m_ecs;
 }
 
 void World::BuildAll(DeviceContext& dev, ThreadPool* pool)
 {
-    m_impl->batchingSystem.BuildAll(m_impl->ecs, dev, pool);
+    m_batchingSystem.BuildAll(m_ecs, dev, pool);
 }
 
 void World::FlushRebuild(ThreadPool* pool)
 {
-    m_impl->batchingSystem.FlushRebuild(pool);
+    m_batchingSystem.FlushRebuild(pool);
 }
 
 } // namespace xcel
