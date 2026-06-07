@@ -60,10 +60,33 @@ void WindowContext::SetPassOptions(const PassOptions& opts)
     m_graphDirty  = true;
 }
 
+void WindowContext::SetShaderDir(std::filesystem::path dir)
+{
+    m_shaderDir = std::move(dir);
+}
+
+void WindowContext::Init()
+{
+    if (m_initialized) return;
+    InitVulkan();
+    m_initialized = true;
+}
+
+bool WindowContext::Tick()
+{
+    if (m_widget->ShouldClose()) return false;
+    m_widget->PollEvents();
+    for (auto& sys : m_systems)
+        sys->Update(m_world.Ecs());
+    DrawFrame();
+    return true;
+}
+
 void WindowContext::Run()
 {
-    InitVulkan();
-    MainLoop();
+    Init();
+    while (Tick()) {}
+    vkDeviceWaitIdle(m_vulkan.PrimaryDevice().Device());
 }
 
 void WindowContext::AddSystemImpl(std::unique_ptr<ISystem> system)
@@ -95,7 +118,7 @@ void WindowContext::InitVulkan()
         .SetSurface(m_vulkan.Surface())
         .SetWindow(*m_widget)
         .SetDescriptors(m_descriptors)
-        .SetShaderDir("shaders/")
+        .SetShaderDir(m_shaderDir.string())
         .Build(dev);
 
     BuildMeshes();
@@ -160,17 +183,6 @@ void WindowContext::BuildMeshes()
     });
 }
 
-void WindowContext::MainLoop()
-{
-    while (!m_widget->ShouldClose()) {
-        m_widget->PollEvents();
-        for (auto& sys : m_systems)
-            sys->Update(m_world.Ecs());
-        DrawFrame();
-    }
-    vkDeviceWaitIdle(m_vulkan.PrimaryDevice().Device());
-}
-
 void WindowContext::UpdateUBO(uint32_t frameIndex)
 {
     const float aspect = static_cast<float>(m_swapchain.Extent().width)
@@ -208,7 +220,7 @@ void WindowContext::DrawFrame()
             .SetSurface(m_vulkan.Surface())
             .SetWindow(*m_widget)
             .SetDescriptors(m_descriptors)
-            .SetShaderDir("shaders/")
+            .SetShaderDir(m_shaderDir.string())
             .Build(dev);
         m_graphDirty = false;
     }

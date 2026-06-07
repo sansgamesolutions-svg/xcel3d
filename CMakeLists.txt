@@ -23,3 +23,41 @@ add_subdirectory(Platforms)
 add_subdirectory(Graphics)
 add_subdirectory(IO)
 add_subdirectory(Viewer)
+
+# ── CMake package install / export ────────────────────────────────────────────
+include(CMakePackageConfigHelpers)
+
+install(TARGETS XcelCommon XcelPlatforms XcelGraphics XcelIO
+    EXPORT XcelTargets
+    ARCHIVE DESTINATION lib
+    INCLUDES DESTINATION include
+)
+
+install(DIRECTORY Common Platforms Graphics IO
+    DESTINATION include/xcel3d
+    FILES_MATCHING PATTERN "*.h"
+)
+
+install(EXPORT XcelTargets
+    FILE XcelTargets.cmake
+    NAMESPACE Xcel::
+    DESTINATION lib/cmake/Xcel3D
+)
+
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/XcelConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+configure_package_config_file(
+    "${CMAKE_SOURCE_DIR}/CMake/XcelConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/XcelConfig.cmake"
+    INSTALL_DESTINATION lib/cmake/Xcel3D
+)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/XcelConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/XcelConfigVersion.cmake"
+    DESTINATION lib/cmake/Xcel3D
+)
