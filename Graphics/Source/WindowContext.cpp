@@ -188,21 +188,31 @@ void WindowContext::UpdateUBO(uint32_t frameIndex)
     const float aspect = static_cast<float>(m_swapchain.Extent().width)
                        / static_cast<float>(m_swapchain.Extent().height);
 
-    const glm::mat4 model = glm::mat4(1.f);
-    const glm::mat4 view  = m_camera.ViewMatrix();
-    const glm::mat4 proj  = m_camera.ProjMatrix(aspect);
-
-    const glm::vec3 lightPos   = m_camera.Position() + glm::vec3(2.f, 4.f, 2.f);
-    const glm::vec3 lightColor = glm::vec3(1.f, 1.f, 1.f);
-    const glm::vec3 viewPos    = m_camera.Position();
+    const glm::mat4 model   = glm::mat4(1.f);
+    const glm::mat4 view    = m_camera.ViewMatrix();
+    const glm::mat4 proj    = m_camera.ProjMatrix(aspect);
+    const glm::vec3 viewPos = m_camera.Position();
 
     FrameUBO ubo{};
-    std::memcpy(ubo.model,      glm::value_ptr(model),      sizeof(ubo.model));
-    std::memcpy(ubo.view,       glm::value_ptr(view),       sizeof(ubo.view));
-    std::memcpy(ubo.proj,       glm::value_ptr(proj),       sizeof(ubo.proj));
-    std::memcpy(ubo.lightPos,   glm::value_ptr(lightPos),   sizeof(ubo.lightPos));
-    std::memcpy(ubo.lightColor, glm::value_ptr(lightColor), sizeof(ubo.lightColor));
-    std::memcpy(ubo.viewPos,    glm::value_ptr(viewPos),    sizeof(ubo.viewPos));
+    std::memcpy(ubo.model,   glm::value_ptr(model),   sizeof(ubo.model));
+    std::memcpy(ubo.view,    glm::value_ptr(view),     sizeof(ubo.view));
+    std::memcpy(ubo.proj,    glm::value_ptr(proj),     sizeof(ubo.proj));
+    std::memcpy(ubo.viewPos, glm::value_ptr(viewPos),  sizeof(ubo.viewPos));
+
+    uint32_t lightCount = 0;
+    m_world.Ecs().each([&](const LightComponent& lc) {
+        if (lightCount >= MAX_LIGHTS) return;
+        LightGpu& g = ubo.lights[lightCount++];
+        g.positionAndIntensity[0] = lc.position.x;
+        g.positionAndIntensity[1] = lc.position.y;
+        g.positionAndIntensity[2] = lc.position.z;
+        g.positionAndIntensity[3] = lc.intensity;
+        g.colorAndPad[0] = lc.color.r;
+        g.colorAndPad[1] = lc.color.g;
+        g.colorAndPad[2] = lc.color.b;
+        g.colorAndPad[3] = 0.f;
+    });
+    ubo.lightCount = lightCount;
 
     m_descriptors.UpdateUBO(frameIndex, ubo);
 }
@@ -243,6 +253,9 @@ void WindowContext::DrawFrame()
         const auto* bb = e.get<BoundingBoxComponent>();
         if (pm)      { dc.aabbMin = pm->aabbMin; dc.aabbMax = pm->aabbMax; }
         else if (bb) { dc.aabbMin = bb->min;     dc.aabbMax = bb->max;     }
+        if (const auto* mat = e.get<MaterialComponent>())
+            dc.material = {mat->ambientFactor, mat->diffuseFactor,
+                           mat->specularFactor, mat->shininess};
         drawCalls.push_back(dc);
     });
     if (drawCalls.empty()) return;

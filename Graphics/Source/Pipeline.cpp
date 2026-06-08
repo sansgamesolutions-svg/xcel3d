@@ -1,4 +1,5 @@
 #include "Graphics/Pipeline.h"
+#include "Graphics/DrawCall.h"
 #include "Graphics/MeshTessellator.h"
 #include <fstream>
 #include <stdexcept>
@@ -147,10 +148,17 @@ void Pipeline::Create(
     colorBlend.attachmentCount   = 1;
     colorBlend.pAttachments      = &blendAttachment;
 
+    VkPushConstantRange pcRange{};
+    pcRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    pcRange.offset     = 0;
+    pcRange.size       = sizeof(MaterialData);
+
     VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts    = &descriptorLayout;
+    layoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutInfo.setLayoutCount         = 1;
+    layoutInfo.pSetLayouts            = &descriptorLayout;
+    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.pPushConstantRanges    = &pcRange;
 
     if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
         throw std::runtime_error("Pipeline: vkCreatePipelineLayout failed");
