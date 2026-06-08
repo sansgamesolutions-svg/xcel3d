@@ -11,7 +11,7 @@
 //   cd build/bin && ./XcelExample
 //
 
-#include "Viewer/Application.h"
+#include "Graphics/Application.h"
 #include "Platforms/GlfwWindowWidget.h"
 #include "Graphics/CoordTable.h"
 #include "Graphics/ScalarTable.h"

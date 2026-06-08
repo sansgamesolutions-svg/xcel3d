@@ -156,6 +156,10 @@ void WindowContext::BuildMeshes()
         id->UpdateInstances(dev, transforms);
     });
 
+    // Defer set<BoundingBoxComponent> outside the each() — adding a new component during
+    // iteration mutates the entity's archetype and invalidates the iterator in flecs.
+    struct BbPatch { flecs::entity e; BoundingBoxComponent bb; };
+    std::vector<BbPatch> bbPatches;
     m_world.Ecs().each([&](flecs::entity e, CoordTableComponent& ctc) {
         if (!ctc.coords || ctc.coords->Size() == 0) return;
         glm::vec3 bbMin(std::numeric_limits<float>::max());
@@ -164,10 +168,14 @@ void WindowContext::BuildMeshes()
             bbMin = glm::min(bbMin, pos);
             bbMax = glm::max(bbMax, pos);
         }
-        e.set<BoundingBoxComponent>({bbMin, bbMax});
+        bbPatches.push_back({e, {bbMin, bbMax}});
     });
+    for (auto& p : bbPatches)
+        p.e.set<BoundingBoxComponent>(p.bb);
 
-    m_world.Ecs().each([&](flecs::entity pageEnt, PageMetaComponent& pm) {
+    struct PageBbPatch { flecs::entity e; glm::vec3 bbMin, bbMax; };
+    std::vector<PageBbPatch> pagePatches;
+    m_world.Ecs().each([&](flecs::entity pageEnt, PageMetaComponent&) {
         glm::vec3 bbMin(std::numeric_limits<float>::max());
         glm::vec3 bbMax(-std::numeric_limits<float>::max());
         m_world.Ecs().each([&](flecs::entity meshEnt, BoundingBoxComponent& bb) {
@@ -176,11 +184,13 @@ void WindowContext::BuildMeshes()
                 bbMax = glm::max(bbMax, bb.max);
             }
         });
-        if (bbMin.x <= bbMax.x) {
-            pm.aabbMin = bbMin;
-            pm.aabbMax = bbMax;
-        }
+        if (bbMin.x <= bbMax.x)
+            pagePatches.push_back({pageEnt, bbMin, bbMax});
     });
+    for (auto& p : pagePatches) {
+        auto* pm = p.e.get_mut<PageMetaComponent>();
+        if (pm) { pm->aabbMin = p.bbMin; pm->aabbMax = p.bbMax; }
+    }
 }
 
 void WindowContext::UpdateUBO(uint32_t frameIndex)

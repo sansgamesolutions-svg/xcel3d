@@ -14,17 +14,16 @@ struct alignas(16) LightGpu {
 };
 
 // C++ layout matches GLSL std140 exactly.  See Shaders/mesh.vert for the GLSL mirror.
-// Offsets: model=0, view=64, proj=128, viewPos=192, lightCount=208, lights[8]=224. Total=480.
+// In std140, vec3 occupies 12 bytes (not 16); the next 4-byte-aligned field follows immediately.
+// Offsets: model=0, view=64, proj=128, viewPos=192, lightCount=204, lights[8]=208. Total=464.
 struct alignas(16) FrameUBO {
     float    model[16];
     float    view[16];
     float    proj[16];
-    float    viewPos[3];           // offset 192
-    float    _viewPad;             // offset 204 — pads vec3 to 16 bytes (GLSL std140)
-    uint32_t lightCount;           // offset 208
-    float    _pad[3];              // offset 212 — 12-byte pad to reach 16-byte boundary at 224
-    LightGpu lights[MAX_LIGHTS];   // offset 224, 8 × 32 = 256 bytes
-    // total: 480 bytes
+    float    viewPos[3];           // offset 192, 12 bytes
+    uint32_t lightCount;           // offset 204 (uint aligns to 4; 204 % 4 == 0)
+    LightGpu lights[MAX_LIGHTS];   // offset 208 (LightGpu aligns to 16; 208 % 16 == 0)
+    // total: 208 + 8 × 32 = 464 bytes
 };
 
 class DescriptorManager

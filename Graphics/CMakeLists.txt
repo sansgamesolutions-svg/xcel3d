@@ -1,4 +1,4 @@
-set(SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/Shaders")
+set(SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Shaders")
 set(SHADER_OUTPUT_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders")
 set(SHADER_VERT_SPV "${SHADER_OUTPUT_DIR}/mesh.vert.spv")
 set(SHADER_FRAG_SPV "${SHADER_OUTPUT_DIR}/mesh.frag.spv")
@@ -63,7 +63,7 @@ add_library(XcelGraphics STATIC
 
 target_include_directories(XcelGraphics
     PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
         $<BUILD_INTERFACE:${GLM_INCLUDE_DIR}>
         $<BUILD_INTERFACE:${Vulkan_INCLUDE_DIRS}>
         $<INSTALL_INTERFACE:include/xcel3d>

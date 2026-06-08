@@ -4,7 +4,7 @@ add_library(XcelCommon STATIC
 
 target_include_directories(XcelCommon
     PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
         $<INSTALL_INTERFACE:include/xcel3d>
 )
 

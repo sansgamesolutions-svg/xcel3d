@@ -1,6 +1,6 @@
 include(FetchContent)
 
-set(XCEL_EXTERNAL_ROOT "E:/Personal/Xcel3D/External"
+set(XCEL_EXTERNAL_ROOT "D:/WorkSpace/Xcel3D/External"
     CACHE PATH "Root directory for Xcel3D external dependencies")
 
 set(VULKAN_SDK "${XCEL_EXTERNAL_ROOT}/vulkan/1.4.335.0")
