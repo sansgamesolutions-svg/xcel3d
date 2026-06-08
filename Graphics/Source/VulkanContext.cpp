@@ -1,8 +1,8 @@
 #include "Graphics/VulkanContext.h"
 #include "Platforms/IWindowWidget.h"
+#include "Common/Logger.h"
 #include <stdexcept>
 #include <algorithm>
-#include <iostream>
 #include <set>
 #include <string>
 #include <vector>
@@ -49,8 +49,12 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VulkanContext::DebugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pData,
     void*)
 {
-    if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-        std::cerr << "[Vulkan] " << pData->pMessage << "\n";
+    if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+        XCEL_LOG_ERROR(Vulkan, "{}", pData->pMessage);
+    else if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+        XCEL_LOG_WARN(Vulkan, "{}", pData->pMessage);
+    else
+        XCEL_LOG_DEBUG(Vulkan, "{}", pData->pMessage);
     return VK_FALSE;
 }
 

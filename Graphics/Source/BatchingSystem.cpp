@@ -1,6 +1,7 @@
 #include "Graphics/BatchingSystem.h"
 #include "Graphics/BatchDrawable.h"
 #include "Graphics/Component.h"
+#include "Common/Logger.h"
 #include <unordered_set>
 #include <unordered_map>
 #include <string>
@@ -79,6 +80,8 @@ flecs::entity BatchingSystem::FindOrCreatePage(
     std::string name = std::string("page_") + PrimitiveTypeName(type)
                      + "_" + std::to_string(m_pageCount++);
 
+    XCEL_LOG_DEBUG(Batching, "Creating page '{}' ({} byte budget)", name, m_pageCapacity);
+
     auto bd = std::make_shared<BatchDrawable>();
 
     flecs::entity page = world.entity()
@@ -118,6 +121,9 @@ void BatchingSystem::BuildAll(
             if (meta) meta->usedBytes += bytes;
         }
     }
+
+    XCEL_LOG_INFO(Batching, "BuildAll: {} mesh(es) -> {} page(s)",
+                  m_pending.size(), m_pageCount);
     m_pending.clear();
 
     // Build GPU buffers for all pages.
@@ -174,7 +180,12 @@ void BatchingSystem::RebuildPage(flecs::entity pageEntity, ThreadPool* pool)
         }
     });
 
+    XCEL_LOG_DEBUG(Batching, "RebuildPage type={} inputs={}",
+                   PrimitiveTypeName(pageType), inputs.size());
+
     bd->Rebuild(*m_dev, inputs, pool);
+
+    XCEL_LOG_TRACE(Batching, "  -> {} indices", bd->IndexCount());
 }
 
 // ── FlushRebuild ──────────────────────────────────────────────────────────────

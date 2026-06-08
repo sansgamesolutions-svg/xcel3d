@@ -1,5 +1,6 @@
 add_library(XcelCommon STATIC
     Source/ThreadPool.cpp
+    Source/Logger.cpp
 )
 
 target_include_directories(XcelCommon
