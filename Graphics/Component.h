@@ -88,4 +88,21 @@ struct TessellationStrategyComponent {
     std::shared_ptr<ITessellationStrategy> strategy;
 };
 
+// ── Light entity component ──────────────────────────────────────────────────
+// One component per light entity; World::AddLight() creates these.
+struct LightComponent {
+    glm::vec3 position{0.f, 5.f, 5.f};
+    glm::vec3 color{1.f, 1.f, 1.f};
+    float     intensity = 1.0f;
+};
+
+// ── Per-mesh material component ─────────────────────────────────────────────
+// Optional; mesh entities without this component use the built-in defaults.
+struct MaterialComponent {
+    float ambientFactor  = 0.15f;
+    float diffuseFactor  = 1.0f;
+    float specularFactor = 0.4f;
+    float shininess      = 32.0f;
+};
+
 } // namespace xcel

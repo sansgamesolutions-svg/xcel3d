@@ -12,16 +12,18 @@ layout(location = 0) out vec3 fragPos;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec3 fragColor;
 
+struct LightGpu {
+    vec4 positionAndIntensity; // xyz = world position, w = intensity
+    vec4 colorAndPad;          // xyz = linear RGB color, w = 0
+};
+
 layout(set = 0, binding = 0) uniform FrameUBO {
-    mat4 model;
-    mat4 view;
-    mat4 proj;
-    vec3 lightPos;
-    float _pad0;
-    vec3 lightColor;
-    float _pad1;
-    vec3 viewPos;
-    float _pad2;
+    mat4     model;
+    mat4     view;
+    mat4     proj;
+    vec3     viewPos;
+    uint     lightCount;
+    LightGpu lights[8];
 } ubo;
 
 void main() {

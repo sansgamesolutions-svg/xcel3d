@@ -6,30 +6,46 @@ layout(location = 2) in vec3 fragColor;
 
 layout(location = 0) out vec4 outColor;
 
+struct LightGpu {
+    vec4 positionAndIntensity; // xyz = world position, w = intensity
+    vec4 colorAndPad;          // xyz = linear RGB color, w = 0
+};
+
 layout(set = 0, binding = 0) uniform FrameUBO {
-    mat4 model;
-    mat4 view;
-    mat4 proj;
-    vec3 lightPos;
-    float _pad0;
-    vec3 lightColor;
-    float _pad1;
-    vec3 viewPos;
-    float _pad2;
+    mat4     model;
+    mat4     view;
+    mat4     proj;
+    vec3     viewPos;
+    uint     lightCount;
+    LightGpu lights[8];
 } ubo;
+
+layout(push_constant) uniform MaterialPC {
+    float ambientFactor;
+    float diffuseFactor;
+    float specularFactor;
+    float shininess;
+} mat;
 
 void main() {
     vec3 N = normalize(fragNormal);
-    vec3 L = normalize(ubo.lightPos - fragPos);
     vec3 V = normalize(ubo.viewPos - fragPos);
-    vec3 H = normalize(L + V);
 
-    float ambient  = 0.15;
-    float diffuse  = max(dot(N, L), 0.0);
-    float specular = pow(max(dot(N, H), 0.0), 32.0);
+    vec3 result = mat.ambientFactor * fragColor;
 
-    vec3 result = (ambient + diffuse) * fragColor * ubo.lightColor
-                + specular * ubo.lightColor * 0.4;
+    for (uint i = 0u; i < ubo.lightCount; ++i) {
+        vec3  lPos   = ubo.lights[i].positionAndIntensity.xyz;
+        float lInten = ubo.lights[i].positionAndIntensity.w;
+        vec3  lColor = ubo.lights[i].colorAndPad.xyz;
+
+        vec3  L    = normalize(lPos - fragPos);
+        vec3  H    = normalize(L + V);
+        float diff = max(dot(N, L), 0.0);
+        float spec = pow(max(dot(N, H), 0.0), mat.shininess);
+
+        result += (diff * mat.diffuseFactor * fragColor
+                 + spec * mat.specularFactor) * lColor * lInten;
+    }
 
     outColor = vec4(result, 1.0);
 }

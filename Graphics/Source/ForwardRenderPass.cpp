@@ -73,6 +73,9 @@ void ForwardRenderPass::Record(VkCommandBuffer cmd, PassContext& ctx)
         // Each slot corresponds to one direct draw call; GPU skips slots with count == 0.
         for (uint32_t i = 0; i < ctx.indirectDrawCount; ++i) {
             const auto& dc = ctx.directDrawCalls[i];
+            vkCmdPushConstants(cmd, m_pipeline.PipelineLayout(),
+                               VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                               sizeof(MaterialData), &dc.material);
             VkBuffer     bufs[2] = {dc.vertexBuffer->Buffer(), dc.instanceBuffer->Buffer()};
             VkDeviceSize offs[2] = {0, 0};
             vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
@@ -89,6 +92,9 @@ void ForwardRenderPass::Record(VkCommandBuffer cmd, PassContext& ctx)
     } else {
         // Direct path: no culling active.
         for (const auto& dc : ctx.directDrawCalls) {
+            vkCmdPushConstants(cmd, m_pipeline.PipelineLayout(),
+                               VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                               sizeof(MaterialData), &dc.material);
             VkBuffer     bufs[2] = {dc.vertexBuffer->Buffer(), dc.instanceBuffer->Buffer()};
             VkDeviceSize offs[2] = {0, 0};
             vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);

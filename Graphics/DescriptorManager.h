@@ -5,17 +5,26 @@
 
 namespace xcel {
 
+static constexpr uint32_t MAX_LIGHTS = 8;
+
+// GPU light record — two vec4s, matching GLSL std140 exactly (32 bytes each).
+struct alignas(16) LightGpu {
+    float positionAndIntensity[4]; // xyz = world position, w = intensity
+    float colorAndPad[4];          // xyz = linear RGB color, w = 0
+};
+
+// C++ layout matches GLSL std140 exactly.  See Shaders/mesh.vert for the GLSL mirror.
+// Offsets: model=0, view=64, proj=128, viewPos=192, lightCount=208, lights[8]=224. Total=480.
 struct alignas(16) FrameUBO {
-    float model[16];        // offset   0
-    float view[16];         // offset  64
-    float proj[16];         // offset 128
-    float lightPos[3];      // offset 192
-    float _pad0;
-    float lightColor[3];    // offset 208
-    float _pad1;
-    float viewPos[3];       // offset 224
-    float _pad2;
-    // total: 240 bytes
+    float    model[16];
+    float    view[16];
+    float    proj[16];
+    float    viewPos[3];           // offset 192
+    float    _viewPad;             // offset 204 — pads vec3 to 16 bytes (GLSL std140)
+    uint32_t lightCount;           // offset 208
+    float    _pad[3];              // offset 212 — 12-byte pad to reach 16-byte boundary at 224
+    LightGpu lights[MAX_LIGHTS];   // offset 224, 8 × 32 = 256 bytes
+    // total: 480 bytes
 };
 
 class DescriptorManager

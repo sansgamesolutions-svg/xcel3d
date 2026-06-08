@@ -42,6 +42,11 @@ public:
     Entity AddInstance(Entity templateEntity,
                        const glm::mat4& transform = glm::mat4{1.f});
 
+    Entity AddLight(const std::string& name,
+                    const glm::vec3&   position,
+                    const glm::vec3&   color     = glm::vec3{1.f},
+                    float              intensity = 1.0f);
+
     flecs::world& Ecs();
 
     void BuildAll(DeviceContext& dev, ThreadPool* pool);

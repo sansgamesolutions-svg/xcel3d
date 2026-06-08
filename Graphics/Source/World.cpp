@@ -74,6 +74,16 @@ Entity World::AddInstance(Entity templateEntity, const glm::mat4& transform)
         .add<InstanceOf>(static_cast<flecs::entity>(templateEntity));
 }
 
+Entity World::AddLight(const std::string& name,
+                       const glm::vec3&   position,
+                       const glm::vec3&   color,
+                       float              intensity)
+{
+    return m_ecs.entity()
+        .set<NameComponent>({name})
+        .set<LightComponent>({position, color, intensity});
+}
+
 flecs::world& World::Ecs()
 {
     return m_ecs;
