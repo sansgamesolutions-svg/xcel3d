@@ -22,7 +22,7 @@ target_include_directories(XcelIO
 
 target_link_libraries(XcelIO
     PUBLIC
-        XcelGraphics   # CoordTable, ScalarTable, PrimitiveSet, ColorTable
+        XcelKernel     # CoordTable, ScalarTable, PrimitiveSet, ColorTable
         XcelCommon     # ThreadPool
 )
 

@@ -1,7 +1,7 @@
 #include "IO/Animation/AnimationStream.h"
 #include "IO/Core/FileStreamSource.h"
 #include "Common/ThreadPool.h"
-#include "Graphics/ScalarTable.h"
+#include "Kernel/ScalarTable.h"
 #include <stdexcept>
 
 namespace xcel::io {

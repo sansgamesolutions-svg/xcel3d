@@ -1,8 +1,8 @@
 #pragma once
-#include "Graphics/CoordTable.h"
-#include "Graphics/ScalarTable.h"
-#include "Graphics/ColorTable.h"
-#include "Graphics/PrimitiveSet.h"
+#include "Kernel/CoordTable.h"
+#include "Kernel/ScalarTable.h"
+#include "Kernel/ColorTable.h"
+#include "Kernel/PrimitiveSet.h"
 #include <memory>
 #include <string>
 #include <vector>

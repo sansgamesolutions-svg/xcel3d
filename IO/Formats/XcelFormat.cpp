@@ -4,10 +4,10 @@
 #include "IO/Core/SceneBuilder.h"
 #include "IO/Scene/SceneDocument.h"
 #include "IO/Scene/ChunkDescriptor.h"
-#include "Graphics/CoordTable.h"
-#include "Graphics/ScalarTable.h"
-#include "Graphics/ColorTable.h"
-#include "Graphics/PrimitiveSet.h"
+#include "Kernel/CoordTable.h"
+#include "Kernel/ScalarTable.h"
+#include "Kernel/ColorTable.h"
+#include "Kernel/PrimitiveSet.h"
 #include "Common/ThreadPool.h"
 #include <array>
 #include <cstring>

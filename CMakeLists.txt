@@ -20,19 +20,20 @@ endif()
 
 add_subdirectory(Common)
 add_subdirectory(Platforms)
-add_subdirectory(Graphics)
+add_subdirectory(Kernel)
+add_subdirectory(Renderer)
 add_subdirectory(IO)
 
 # ── CMake package install / export ────────────────────────────────────────────
 include(CMakePackageConfigHelpers)
 
-install(TARGETS XcelCommon XcelPlatforms XcelGraphics XcelIO
+install(TARGETS XcelCommon XcelPlatforms XcelKernel XcelRenderer XcelIO
     EXPORT XcelTargets
     ARCHIVE DESTINATION lib
     INCLUDES DESTINATION include
 )
 
-install(DIRECTORY Common Platforms Graphics IO
+install(DIRECTORY Common Platforms Kernel Renderer IO
     DESTINATION include/xcel3d
     FILES_MATCHING PATTERN "*.h"
 )

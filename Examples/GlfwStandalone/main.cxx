@@ -11,17 +11,17 @@
 //   cd build/bin && ./XcelExample
 //
 
-#include "Graphics/Application.h"
+#include "Renderer/Application.h"
 #include "Platforms/GlfwWindowWidget.h"
-#include "Graphics/CoordTable.h"
-#include "Graphics/ScalarTable.h"
-#include "Graphics/ColorTable.h"
-#include "Graphics/PrimitiveSet.h"
-#include "Graphics/Camera.h"
+#include "Kernel/CoordTable.h"
+#include "Kernel/ScalarTable.h"
+#include "Kernel/ColorTable.h"
+#include "Kernel/PrimitiveSet.h"
+#include "Renderer/Camera.h"
 #include "Common/ISystem.h"
 #include "IO/Core/IOManager.h"
-#include "IO/Core/SceneLoader.h"
-#include "Graphics/Component.h"
+#include "SceneLoader.h"
+#include "Renderer/Component.h"
 #include <glm/glm.hpp>
 #include <atomic>
 #include <chrono>
