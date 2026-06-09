@@ -3,6 +3,8 @@ set(SHADER_OUTPUT_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders")
 set(SHADER_VERT_SPV "${SHADER_OUTPUT_DIR}/mesh.vert.spv")
 set(SHADER_FRAG_SPV "${SHADER_OUTPUT_DIR}/mesh.frag.spv")
 set(SHADER_FRUSTUM_CULL_SPV "${SHADER_OUTPUT_DIR}/frustum_cull.comp.spv")
+set(SHADER_MANIP_VERT_SPV "${SHADER_OUTPUT_DIR}/manipulator.vert.spv")
+set(SHADER_MANIP_FRAG_SPV "${SHADER_OUTPUT_DIR}/manipulator.frag.spv")
 
 add_custom_command(
     OUTPUT "${SHADER_VERT_SPV}"
@@ -25,6 +27,22 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_OUTPUT_DIR}"
     COMMAND "${GLSLC_EXECUTABLE}" "${SHADER_SOURCE_DIR}/frustum_cull.comp" -o "${SHADER_FRUSTUM_CULL_SPV}"
     DEPENDS "${SHADER_SOURCE_DIR}/frustum_cull.comp"
+    VERBATIM
+)
+
+add_custom_command(
+    OUTPUT "${SHADER_MANIP_VERT_SPV}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_OUTPUT_DIR}"
+    COMMAND "${GLSLC_EXECUTABLE}" "${SHADER_SOURCE_DIR}/manipulator.vert" -o "${SHADER_MANIP_VERT_SPV}"
+    DEPENDS "${SHADER_SOURCE_DIR}/manipulator.vert"
+    VERBATIM
+)
+
+add_custom_command(
+    OUTPUT "${SHADER_MANIP_FRAG_SPV}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_OUTPUT_DIR}"
+    COMMAND "${GLSLC_EXECUTABLE}" "${SHADER_SOURCE_DIR}/manipulator.frag" -o "${SHADER_MANIP_FRAG_SPV}"
+    DEPENDS "${SHADER_SOURCE_DIR}/manipulator.frag"
     VERBATIM
 )
 
@@ -56,9 +74,19 @@ add_library(XcelGraphics STATIC
     # new
     Source/VulkanContext.cpp
     Source/World.cpp
+    # Manipulators
+    Source/Manipulator/ManipulatorGeometry.cpp
+    Source/Manipulator/ViewManipulator.cpp
+    Source/Manipulator/TranslateManipulator.cpp
+    Source/Manipulator/SectionCutManipulator.cpp
+    Source/Manipulator/ManipulatorController.cpp
+    Source/Manipulator/ManipulatorPass.cpp
+    # Shaders (SPIR-V targets ensure compilation before linking)
     "${SHADER_VERT_SPV}"
     "${SHADER_FRAG_SPV}"
     "${SHADER_FRUSTUM_CULL_SPV}"
+    "${SHADER_MANIP_VERT_SPV}"
+    "${SHADER_MANIP_FRAG_SPV}"
 )
 
 target_include_directories(XcelGraphics

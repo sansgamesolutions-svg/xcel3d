@@ -105,4 +105,9 @@ struct MaterialComponent {
     float shininess      = 32.0f;
 };
 
+// ── Selection tag ────────────────────────────────────────────────────────────
+// Zero-size tag; at most one entity should carry it at any time.
+// Used by TranslateManipulator to determine which entity to operate on.
+struct SelectedComponent {};
+
 } // namespace xcel
