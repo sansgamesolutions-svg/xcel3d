@@ -1,6 +1,7 @@
 #include "Graphics/RenderGraphBuilder.h"
 #include "Graphics/ForwardRenderPass.h"
 #include "Graphics/FrustumCullPass.h"
+#include "Graphics/Manipulator/ManipulatorPass.h"
 #include <stdexcept>
 
 namespace xcel {
@@ -44,6 +45,8 @@ RenderGraph RenderGraphBuilder::Build(DeviceContext& dev)
     info.framesInFlight   = RenderGraph::MAX_FRAMES;
     info.maxObjects       = m_maxObjects;
     info.shaderDir        = m_shaderDir;
+    info.colorFormat      = colorFmt;
+    info.depthFormat      = VK_FORMAT_D32_SFLOAT;
 
     std::vector<std::unique_ptr<IPass>> passes;
 
@@ -53,6 +56,7 @@ RenderGraph RenderGraphBuilder::Build(DeviceContext& dev)
     (void)m_options.occlusionCulling;
 
     passes.push_back(std::move(forwardPass));
+    passes.push_back(std::make_unique<ManipulatorPass>());
 
     RenderGraph graph;
     graph.Build(dev, *m_swapchain, info, std::move(passes));

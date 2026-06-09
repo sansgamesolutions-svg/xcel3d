@@ -11,12 +11,14 @@
 #include "Graphics/Component.h"
 #include "Graphics/CoordTable.h"
 #include "Graphics/ColorTable.h"
+#include "Graphics/Manipulator/PickingRay.h"
 #include "Common/ISystem.h"
 #include "Common/ThreadPool.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <stdexcept>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <vector>
 
 namespace xcel {
@@ -32,17 +34,95 @@ WindowContext::WindowContext(std::unique_ptr<IWindowWidget> widget)
         m_camera.Zoom((float)-yOffset * 0.5f);
     });
     m_widget->SetCursorPosCallback([this](double x, double y) {
-        if (m_mousePressed) {
-            m_camera.Orbit(
-                 (float)(x - m_lastMouseX) * 0.005f,
-                -(float)(y - m_lastMouseY) * 0.005f);
+        int w = 0, h = 0;
+        m_widget->GetFramebufferSize(w, h);
+
+        // Build inverse view-proj for ray casting.
+        const float aspect = w > 0 ? static_cast<float>(w) / static_cast<float>(h) : 1.f;
+        const glm::mat4 vp       = m_camera.ProjMatrix(aspect) * m_camera.ViewMatrix();
+        const glm::mat4 invVP    = glm::inverse(vp);
+
+        // Detect drag (> 4 px total movement from press).
+        if (m_leftPressed || m_rightPressed) {
+            double dx = x - m_mouseDownX, dy = y - m_mouseDownY;
+            if (!m_isDragging && (dx*dx + dy*dy) > 16.0)
+                m_isDragging = true;
+        }
+
+        if (m_isDragging) {
+            if (m_manipulators.OnCursorMove(x, y, w, h, invVP, m_camera, m_world.Ecs()))
+            {
+                m_lastMouseX = x; m_lastMouseY = y;
+                return;
+            }
+            if (m_leftPressed) {
+                m_camera.Orbit(
+                     (float)(x - m_lastMouseX) * 0.005f,
+                    -(float)(y - m_lastMouseY) * 0.005f);
+            }
+            if (m_rightPressed) {
+                const float scale = m_camera.Radius() * 0.0015f;
+                m_camera.Pan(-(float)(x - m_lastMouseX) * scale,
+                              (float)(y - m_lastMouseY) * scale);
+            }
         }
         m_lastMouseX = x;
         m_lastMouseY = y;
     });
     m_widget->SetMouseButtonCallback([this](MouseButton b, InputAction a, int) {
-        if (b == MouseButton::Left)
-            m_mousePressed = (a == InputAction::Press);
+        int w = 0, h = 0;
+        m_widget->GetFramebufferSize(w, h);
+        const float aspect = w > 0 ? static_cast<float>(w) / static_cast<float>(h) : 1.f;
+        const glm::mat4 vp    = m_camera.ProjMatrix(aspect) * m_camera.ViewMatrix();
+        const glm::mat4 invVP = glm::inverse(vp);
+
+        if (b == MouseButton::Left) {
+            if (a == InputAction::Press) {
+                m_leftPressed = true;
+                m_mouseDownX  = m_lastMouseX;
+                m_mouseDownY  = m_lastMouseY;
+                m_isDragging  = false;
+            } else {
+                // Left release: if not a drag → pick/select.
+                if (!m_isDragging) {
+                    // Let manipulators handle the click first.
+                    bool consumed = m_manipulators.OnMouseButton(
+                        b, a, m_lastMouseX, m_lastMouseY, w, h, invVP, m_camera, m_world.Ecs());
+
+                    if (!consumed) {
+                        // Entity picking: cast ray, select closest AABB hit.
+                        Ray ray = RayFromScreen(m_lastMouseX, m_lastMouseY, w, h,
+                                               invVP, m_camera.Position());
+                        float      bestT    = std::numeric_limits<float>::max();
+                        flecs::entity closest;
+                        m_world.Ecs().each([&](flecs::entity e, const BoundingBoxComponent& bb) {
+                            auto hit = RayVsAABB(ray, bb.min, bb.max);
+                            if (hit && *hit < bestT) { bestT = *hit; closest = e; }
+                        });
+                        // Clear all selections.
+                        m_world.Ecs().each([](flecs::entity e, SelectedComponent&) {
+                            e.remove<SelectedComponent>();
+                        });
+                        if (closest.is_alive())
+                            closest.add<SelectedComponent>();
+                    }
+                } else {
+                    // Drag release: notify manipulators.
+                    m_manipulators.OnMouseButton(b, a, m_lastMouseX, m_lastMouseY,
+                                                  w, h, invVP, m_camera, m_world.Ecs());
+                }
+                m_leftPressed = false;
+                m_isDragging  = false;
+            }
+        }
+        if (b == MouseButton::Right) {
+            m_rightPressed = (a == InputAction::Press);
+            if (a == InputAction::Press) {
+                m_mouseDownX = m_lastMouseX;
+                m_mouseDownY = m_lastMouseY;
+                m_isDragging = false;
+            }
+        }
     });
 }
 
@@ -51,8 +131,9 @@ WindowContext::~WindowContext()
     Cleanup();
 }
 
-World&  WindowContext::GetWorld()  { return m_world; }
-Camera& WindowContext::GetCamera() { return m_camera; }
+World&                 WindowContext::GetWorld()        { return m_world;        }
+Camera&                WindowContext::GetCamera()       { return m_camera;       }
+ManipulatorController& WindowContext::GetManipulators() { return m_manipulators; }
 
 void WindowContext::SetPassOptions(const PassOptions& opts)
 {
@@ -120,6 +201,8 @@ void WindowContext::InitVulkan()
         .SetDescriptors(m_descriptors)
         .SetShaderDir(m_shaderDir.string())
         .Build(dev);
+
+    m_manipulators.Build(dev);
 
     BuildMeshes();
 }
@@ -224,6 +307,12 @@ void WindowContext::UpdateUBO(uint32_t frameIndex)
     });
     ubo.lightCount = lightCount;
 
+    const glm::vec4 sp = m_manipulators.SectionPlane();
+    ubo.sectionPlane[0] = sp.x;
+    ubo.sectionPlane[1] = sp.y;
+    ubo.sectionPlane[2] = sp.z;
+    ubo.sectionPlane[3] = sp.w;
+
     m_descriptors.UpdateUBO(frameIndex, ubo);
 }
 
@@ -268,19 +357,30 @@ void WindowContext::DrawFrame()
                            mat->specularFactor, mat->shininess};
         drawCalls.push_back(dc);
     });
-    if (drawCalls.empty()) return;
-
     const uint32_t  currentFrame = m_renderGraph.CurrentFrame();
-    UpdateUBO(currentFrame);
 
+    // Update manipulators (gizmo positions, view cube orientation).
     const float     aspect   = static_cast<float>(m_swapchain.Extent().width)
                              / static_cast<float>(m_swapchain.Extent().height);
-    const glm::mat4 viewProj = m_camera.ProjMatrix(aspect) * m_camera.ViewMatrix();
+    const glm::mat4 view     = m_camera.ViewMatrix();
+    const glm::mat4 viewProj = m_camera.ProjMatrix(aspect) * view;
+    m_manipulators.Update(m_camera, m_world.Ecs(), view, m_swapchain.Extent());
+
+    m_manipulatorSolidDraws.clear();
+    m_manipulatorAlphaDraws.clear();
+    m_manipulators.GatherDrawCalls(m_manipulatorSolidDraws, m_manipulatorAlphaDraws);
+
+    if (drawCalls.empty() && m_manipulatorSolidDraws.empty() && m_manipulatorAlphaDraws.empty())
+        return;
+
+    UpdateUBO(currentFrame);
 
     PassContext ctx{};
-    ctx.uboDescriptorSet = m_descriptors.DescriptorSet(currentFrame);
-    ctx.directDrawCalls  = drawCalls;
-    ctx.viewProj         = viewProj;
+    ctx.uboDescriptorSet           = m_descriptors.DescriptorSet(currentFrame);
+    ctx.directDrawCalls            = drawCalls;
+    ctx.viewProj                   = viewProj;
+    ctx.manipulatorSolidDrawCalls  = m_manipulatorSolidDraws;
+    ctx.manipulatorAlphaDrawCalls  = m_manipulatorAlphaDraws;
 
     bool needsResize = m_framebufferResized;
     m_renderGraph.Execute(dev, ctx, needsResize);
@@ -299,6 +399,7 @@ void WindowContext::Cleanup()
         VkDevice device = m_vulkan.PrimaryDevice().Device();
         vkDeviceWaitIdle(device);
 
+        m_manipulators.Destroy(device);
         m_renderGraph.Destroy(device);
         m_defaultInstanceBuffer.Destroy(device);
         m_descriptors.Destroy(device);

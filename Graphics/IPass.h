@@ -26,6 +26,10 @@ struct PassContext
     VkBuffer  indirectDrawBuffer = VK_NULL_HANDLE;
     VkBuffer  drawCountBuffer    = VK_NULL_HANDLE;
     uint32_t  indirectDrawCount  = 0;  // number of occupied slots in the indirect buffers
+
+    // Manipulator overlay draw calls (populated by WindowContext each frame).
+    std::span<const DrawCall> manipulatorSolidDrawCalls;
+    std::span<const DrawCall> manipulatorAlphaDrawCalls;
 };
 
 struct BuildPassInfo
@@ -37,6 +41,8 @@ struct BuildPassInfo
     uint32_t              framesInFlight    = 2;
     uint32_t              maxObjects        = 0;
     std::string           shaderDir;
+    VkFormat              colorFormat       = VK_FORMAT_B8G8R8A8_SRGB;
+    VkFormat              depthFormat       = VK_FORMAT_D32_SFLOAT;
 };
 
 class IPass

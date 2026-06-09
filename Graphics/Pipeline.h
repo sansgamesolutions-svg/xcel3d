@@ -5,6 +5,16 @@
 
 namespace xcel {
 
+struct PipelineConfig
+{
+    bool            depthTestEnable  = true;
+    bool            depthWriteEnable = true;
+    bool            alphaBlend       = false;
+    VkCullModeFlags cullMode         = VK_CULL_MODE_BACK_BIT;
+    // Push-constant size in bytes (fragment stage). 0 = no push constant.
+    uint32_t        pushConstantSize = 0;
+};
+
 class Pipeline
 {
 public:
@@ -20,7 +30,8 @@ public:
         VkDescriptorSetLayout descriptorLayout,
         VkExtent2D            viewportExtent,
         const std::string&    vertSpvPath,
-        const std::string&    fragSpvPath);
+        const std::string&    fragSpvPath,
+        const PipelineConfig& config = {});
 
     void Destroy(VkDevice device);
 

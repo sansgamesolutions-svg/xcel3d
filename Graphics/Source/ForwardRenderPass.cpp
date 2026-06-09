@@ -62,6 +62,20 @@ void ForwardRenderPass::Record(VkCommandBuffer cmd, PassContext& ctx)
 
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+    VkViewport vp{};
+    vp.x        = 0.f;
+    vp.y        = 0.f;
+    vp.width    = static_cast<float>(ctx.extent.width);
+    vp.height   = static_cast<float>(ctx.extent.height);
+    vp.minDepth = 0.f;
+    vp.maxDepth = 1.f;
+    vkCmdSetViewport(cmd, 0, 1, &vp);
+
+    VkRect2D sc{};
+    sc.offset = {0, 0};
+    sc.extent = ctx.extent;
+    vkCmdSetScissor(cmd, 0, 1, &sc);
+
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.GetHandle());
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,

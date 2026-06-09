@@ -24,6 +24,7 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     vec3     viewPos;
     uint     lightCount;
     LightGpu lights[8];
+    vec4     sectionPlane;
 } ubo;
 
 void main() {

@@ -9,6 +9,7 @@
 #include "Graphics/GpuBuffer.h"
 #include "Graphics/PassOptions.h"
 #include "Graphics/World.h"
+#include "Graphics/Manipulator/ManipulatorController.h"
 #include "Common/ThreadPool.h"
 #include <concepts>
 #include <filesystem>
@@ -27,8 +28,9 @@ public:
     WindowContext(const WindowContext&)            = delete;
     WindowContext& operator=(const WindowContext&) = delete;
 
-    World&  GetWorld();
-    Camera& GetCamera();
+    World&                 GetWorld();
+    Camera&                GetCamera();
+    ManipulatorController& GetManipulators();
 
     void SetPassOptions(const PassOptions& opts);
     void SetShaderDir(std::filesystem::path dir);
@@ -67,9 +69,12 @@ private:
 
     // Windowing + input
     std::unique_ptr<IWindowWidget> m_widget;
-    double m_lastMouseX = 0.0, m_lastMouseY = 0.0;
-    bool   m_mousePressed  = false;
-    bool   m_initialized   = false;
+    double m_lastMouseX   = 0.0, m_lastMouseY   = 0.0;
+    double m_mouseDownX   = 0.0, m_mouseDownY   = 0.0;
+    bool   m_leftPressed  = false;
+    bool   m_rightPressed = false;
+    bool   m_isDragging   = false;
+    bool   m_initialized  = false;
 
     std::filesystem::path m_shaderDir = "shaders/";
 
@@ -90,6 +95,11 @@ private:
     World                                 m_world;
     std::vector<std::unique_ptr<ISystem>> m_systems;
     ThreadPool                            m_pool;
+
+    // Manipulators and picking
+    ManipulatorController m_manipulators;
+    std::vector<DrawCall> m_manipulatorSolidDraws;
+    std::vector<DrawCall> m_manipulatorAlphaDraws;
 };
 
 } // namespace xcel

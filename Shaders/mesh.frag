@@ -18,6 +18,7 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     vec3     viewPos;
     uint     lightCount;
     LightGpu lights[8];
+    vec4     sectionPlane; // xyz=world-normal, w=d; length(xyz)==0 means disabled
 } ubo;
 
 layout(push_constant) uniform MaterialPC {
@@ -28,6 +29,10 @@ layout(push_constant) uniform MaterialPC {
 } mat;
 
 void main() {
+    if (dot(ubo.sectionPlane.xyz, ubo.sectionPlane.xyz) > 0.01 &&
+        dot(fragPos, ubo.sectionPlane.xyz) + ubo.sectionPlane.w < 0.0)
+        discard;
+
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(ubo.viewPos - fragPos);
 
