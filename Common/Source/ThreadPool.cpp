@@ -3,6 +3,7 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include <stdexcept>
 #include <vector>
 
 namespace xcel {
@@ -57,6 +58,8 @@ void ThreadPool::Enqueue(std::function<void()> task)
 {
     {
         std::lock_guard lock(m_mutex);
+        if (m_stopping)
+            throw std::runtime_error("ThreadPool::Submit called while stopping");
         ++m_pendingTasks;
         m_tasks.push(std::move(task));
     }

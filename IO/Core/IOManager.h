@@ -19,7 +19,7 @@ class IOManager
 {
 public:
     IOManager() = default;
-    ~IOManager() = default;
+    ~IOManager();
 
     IOManager(const IOManager&)            = delete;
     IOManager& operator=(const IOManager&) = delete;
@@ -57,11 +57,12 @@ public:
     void Poll(std::vector<std::shared_ptr<SceneDocument>>& out);
 
 private:
-    FormatRegistry m_registry;
     PluginLoader   m_pluginLoader;
+    FormatRegistry m_registry;
 
     std::mutex     m_pendingMutex;
     std::vector<std::shared_future<std::shared_ptr<SceneDocument>>> m_pending;
+    std::vector<std::shared_future<void>> m_pendingSaves;
 };
 
 } // namespace xcel::io

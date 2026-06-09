@@ -24,16 +24,12 @@ public:
     auto Submit(F&& task) -> std::future<std::invoke_result_t<F>>
     {
         using R = std::invoke_result_t<F>;
-        auto promise = std::make_shared<std::promise<R>>();
-        auto future  = promise->get_future();
+        auto packaged = std::make_shared<std::packaged_task<R()>>(
+            std::forward<F>(task));
+        auto future = packaged->get_future();
 
-        Enqueue([p = std::move(promise), t = std::forward<F>(task)]() mutable {
-            if constexpr (std::is_void_v<R>) {
-                t();
-                p->set_value();
-            } else {
-                p->set_value(t());
-            }
+        Enqueue([packaged = std::move(packaged)] {
+            (*packaged)();
         });
 
         return future;

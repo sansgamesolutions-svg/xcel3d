@@ -108,4 +108,6 @@ target_compile_definitions(XcelGraphics
     PUBLIC
         GLM_FORCE_DEPTH_ZERO_TO_ONE
         GLM_FORCE_RADIANS
+    PRIVATE
+        GLM_ENABLE_EXPERIMENTAL
 )

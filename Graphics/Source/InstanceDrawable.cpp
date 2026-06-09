@@ -25,18 +25,21 @@ void InstanceDrawable::Build(DeviceContext& dev, const ColorTable&, ThreadPool* 
         throw std::runtime_error("InstanceDrawable::Build: missing ECS components");
 
     TessellatedMesh combined;
+    size_t scalarOffset = 0;
     for (const auto& ps : psc->sets) {
         MeshTessellationInput inp{ps.get(),
                                    cc->coords.get(),
                                    sc->scalars.get(),
                                    co->colorTable.get(),
-                                   stc ? stc->strategy.get() : nullptr};
+                                   stc ? stc->strategy.get() : nullptr,
+                                   scalarOffset};
         auto     part = TessellateInput(inp, pool);
         uint32_t base = static_cast<uint32_t>(combined.vertices.size());
         for (auto idx : part.indices)
             combined.indices.push_back(base + idx);
         combined.vertices.insert(combined.vertices.end(),
                                   part.vertices.begin(), part.vertices.end());
+        scalarOffset += ps->ElementCount();
     }
 
     if (combined.vertices.empty())

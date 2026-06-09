@@ -31,12 +31,12 @@ public:
                        Camera&     camera,
                        flecs::world& ecs) override;
 
-    bool OnCursorMove(double x, double y,
-                      int    fbWidth,
-                      int    fbHeight,
-                      const Ray&   ray,
-                      Camera&      camera,
-                      flecs::world& ecs) override { return false; }
+    bool OnCursorMove(double /*x*/, double /*y*/,
+                      int    /*fbWidth*/,
+                      int    /*fbHeight*/,
+                      const Ray&   /*ray*/,
+                      Camera&      /*camera*/,
+                      flecs::world& /*ecs*/) override { return false; }
 
     void GatherSolidDrawCalls(std::vector<DrawCall>& out) const override;
 

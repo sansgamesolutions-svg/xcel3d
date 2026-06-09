@@ -28,7 +28,12 @@ public:
 
     void Seek(uint64_t offset) override
     {
+        if (offset > m_size)
+            throw std::out_of_range("FileStreamSource::Seek past end of stream");
+        m_stream.clear();
         m_stream.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+        if (!m_stream)
+            throw std::runtime_error("Failed to seek input stream");
     }
 
     uint64_t Tell() const override

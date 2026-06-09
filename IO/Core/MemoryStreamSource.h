@@ -1,6 +1,8 @@
 #pragma once
 #include "IO/Core/IStreamSource.h"
+#include <algorithm>
 #include <span>
+#include <stdexcept>
 #include <vector>
 
 namespace xcel::io {
@@ -19,6 +21,8 @@ public:
 
     size_t Read(std::byte* buf, size_t n) override
     {
+        if (m_pos > m_data.size())
+            throw std::runtime_error("MemoryStreamSource position is invalid");
         size_t remaining = m_data.size() - m_pos;
         size_t toRead    = (n < remaining) ? n : remaining;
         std::copy(m_data.data() + m_pos, m_data.data() + m_pos + toRead, buf);
@@ -26,7 +30,12 @@ public:
         return toRead;
     }
 
-    void     Seek(uint64_t offset) override { m_pos = static_cast<size_t>(offset); }
+    void Seek(uint64_t offset) override
+    {
+        if (offset > m_data.size())
+            throw std::out_of_range("MemoryStreamSource::Seek past end of stream");
+        m_pos = static_cast<size_t>(offset);
+    }
     uint64_t Tell()          const override { return m_pos; }
     uint64_t Size()          const override { return m_data.size(); }
 

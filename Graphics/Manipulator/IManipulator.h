@@ -29,7 +29,7 @@ public:
                               flecs::world& ecs) = 0;
 
     virtual void GatherSolidDrawCalls(std::vector<DrawCall>& out) const = 0;
-    virtual void GatherAlphaDrawCalls(std::vector<DrawCall>& out) const {}
+    virtual void GatherAlphaDrawCalls(std::vector<DrawCall>& /*out*/) const {}
 
     virtual bool IsActive() const { return false; }
 };

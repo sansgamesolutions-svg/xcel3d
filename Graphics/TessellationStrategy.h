@@ -20,6 +20,8 @@ struct MeshTessellationInput {
     const ScalarTable*           scalars      = nullptr;
     const ColorTable*            colorTable   = nullptr;
     const ITessellationStrategy* strategy     = nullptr;
+    size_t                       scalarOffset = 0;
+    glm::mat4                    transform{1.f};
 };
 
 // Abstract tessellation strategy. Controls which faces of each element are emitted.

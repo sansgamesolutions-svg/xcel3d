@@ -11,9 +11,9 @@
 #include "Common/ThreadPool.h"
 #include <array>
 #include <cstring>
-#include <future>
-#include <mutex>
+#include <limits>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 namespace xcel::io {
@@ -24,23 +24,34 @@ namespace {
 
 constexpr std::array<char, 4> kMagic = {'X', 'C', 'E', 'L'};
 constexpr uint32_t            kVersion = 1;
+constexpr uint32_t            kMaxTocEntries = 1'000'000;
+
+void ReadExact(IStreamSource& s, std::byte* data, size_t size)
+{
+    if (s.Read(data, size) != size)
+        throw std::runtime_error("Xcel format: unexpected end of stream");
+}
 
 template<typename T>
+    requires std::is_trivially_copyable_v<T>
 void WriteT(IStreamSink& s, const T& v)
 {
     s.Write(reinterpret_cast<const std::byte*>(&v), sizeof(T));
 }
 
 template<typename T>
+    requires std::is_trivially_copyable_v<T>
 T ReadT(IStreamSource& s)
 {
     T v{};
-    s.Read(reinterpret_cast<std::byte*>(&v), sizeof(T));
+    ReadExact(s, reinterpret_cast<std::byte*>(&v), sizeof(T));
     return v;
 }
 
 void WriteStr(IStreamSink& s, const std::string& str)
 {
+    if (str.size() > std::numeric_limits<uint16_t>::max())
+        throw std::length_error("Xcel format: string exceeds 65535 bytes");
     uint16_t len = static_cast<uint16_t>(str.size());
     WriteT(s, len);
     s.Write(reinterpret_cast<const std::byte*>(str.data()), len);
@@ -50,7 +61,7 @@ std::string ReadStr(IStreamSource& s)
 {
     uint16_t len = ReadT<uint16_t>(s);
     std::string str(len, '\0');
-    s.Read(reinterpret_cast<std::byte*>(str.data()), len);
+    ReadExact(s, reinterpret_cast<std::byte*>(str.data()), len);
     return str;
 }
 
@@ -84,25 +95,38 @@ void WriteMeshChunk(IStreamSink& s, const MeshData& mesh)
         uint32_t nElems = static_cast<uint32_t>(ps->ElementCount());
         WriteT(s, nElems);
 
-        // Write connectivity based on type.
-        auto WriteHex = [&](const HexPrimitiveSet& hs) {
-            for (size_t e = 0; e < hs.ElementCount(); ++e)
-                for (uint32_t idx : hs.Element(e)) WriteT(s, idx);
-        };
-        auto WriteTri = [&](const TrianglePrimitiveSet& ts) {
-            for (size_t e = 0; e < ts.ElementCount(); ++e)
-                for (uint32_t idx : ts.Element(e)) WriteT(s, idx);
+        auto writeFixed = [&]<typename SetT>(const SetT& set)
+            requires requires { set.Elements(); }
+        {
+            for (const auto& elem : set.Elements())
+                for (uint32_t idx : elem)
+                    WriteT(s, idx);
         };
 
         switch (ps->Type())
         {
         case PrimitiveType::PT_HEXAHEDRON:
-            WriteHex(static_cast<const HexPrimitiveSet&>(*ps)); break;
+            writeFixed(static_cast<const HexPrimitiveSet&>(*ps)); break;
+        case PrimitiveType::PT_TETRAHEDRON:
+            writeFixed(static_cast<const TetPrimitiveSet&>(*ps)); break;
+        case PrimitiveType::PT_QUAD:
+            writeFixed(static_cast<const QuadPrimitiveSet&>(*ps)); break;
         case PrimitiveType::PT_TRIANGLE:
-            WriteTri(static_cast<const TrianglePrimitiveSet&>(*ps)); break;
-        default:
-            // Other types: write raw element count, no index data (placeholder).
+            writeFixed(static_cast<const TrianglePrimitiveSet&>(*ps)); break;
+        case PrimitiveType::PT_LINE:
+            writeFixed(static_cast<const LinePrimitiveSet&>(*ps)); break;
+        case PrimitiveType::PT_POLYLINE:
+        {
+            const auto& set = static_cast<const PolylinePrimitiveSet&>(*ps);
+            for (const auto& elem : set.Elements()) {
+                if (elem.size() > std::numeric_limits<uint32_t>::max())
+                    throw std::length_error("Xcel format: polyline is too large");
+                WriteT(s, static_cast<uint32_t>(elem.size()));
+                for (uint32_t idx : elem)
+                    WriteT(s, idx);
+            }
             break;
+        }
         }
     }
 }
@@ -141,6 +165,28 @@ MeshData ReadMeshChunk(IStreamSource& s)
             mesh.primSets.push_back(std::move(hs));
             break;
         }
+        case PrimitiveType::PT_TETRAHEDRON:
+        {
+            auto set = std::make_shared<TetPrimitiveSet>();
+            for (uint32_t e = 0; e < nE; ++e) {
+                std::array<uint32_t, 4> idx{};
+                for (auto& i : idx) i = ReadT<uint32_t>(s);
+                set->AddElement(idx);
+            }
+            mesh.primSets.push_back(std::move(set));
+            break;
+        }
+        case PrimitiveType::PT_QUAD:
+        {
+            auto set = std::make_shared<QuadPrimitiveSet>();
+            for (uint32_t e = 0; e < nE; ++e) {
+                std::array<uint32_t, 4> idx{};
+                for (auto& i : idx) i = ReadT<uint32_t>(s);
+                set->AddElement(idx);
+            }
+            mesh.primSets.push_back(std::move(set));
+            break;
+        }
         case PrimitiveType::PT_TRIANGLE:
         {
             auto ts = std::make_shared<TrianglePrimitiveSet>();
@@ -153,8 +199,31 @@ MeshData ReadMeshChunk(IStreamSource& s)
             mesh.primSets.push_back(std::move(ts));
             break;
         }
+        case PrimitiveType::PT_LINE:
+        {
+            auto set = std::make_shared<LinePrimitiveSet>();
+            for (uint32_t e = 0; e < nE; ++e) {
+                std::array<uint32_t, 2> idx{};
+                for (auto& i : idx) i = ReadT<uint32_t>(s);
+                set->AddElement(idx);
+            }
+            mesh.primSets.push_back(std::move(set));
+            break;
+        }
+        case PrimitiveType::PT_POLYLINE:
+        {
+            auto set = std::make_shared<PolylinePrimitiveSet>();
+            for (uint32_t e = 0; e < nE; ++e) {
+                uint32_t nodeCount = ReadT<uint32_t>(s);
+                std::vector<uint32_t> idx(nodeCount);
+                for (auto& i : idx) i = ReadT<uint32_t>(s);
+                set->AddElement(idx);
+            }
+            mesh.primSets.push_back(std::move(set));
+            break;
+        }
         default:
-            break; // Unknown type; skip (no index data written for unknowns above)
+            throw std::runtime_error("Xcel format: unknown primitive type");
         }
     }
 
@@ -180,17 +249,22 @@ void XcelFormatReader::Read(IStreamSource& source, SceneBuilder& out,
 {
     // Validate header.
     std::array<char, 4> magic{};
-    source.Read(reinterpret_cast<std::byte*>(magic.data()), 4);
+    ReadExact(source, reinterpret_cast<std::byte*>(magic.data()), magic.size());
     if (magic != kMagic)
         throw std::runtime_error("XcelFormatReader: invalid magic bytes");
 
     uint32_t version   = ReadT<uint32_t>(source);
     uint64_t tocOffset = ReadT<uint64_t>(source);
-    (void)version;
+    if (version != kVersion)
+        throw std::runtime_error("XcelFormatReader: unsupported version");
+    if (tocOffset > source.Size() || source.Size() - tocOffset < sizeof(uint32_t))
+        throw std::runtime_error("XcelFormatReader: invalid TOC offset");
 
     // Read TOC.
     source.Seek(tocOffset);
     uint32_t tocCount = ReadT<uint32_t>(source);
+    if (tocCount > kMaxTocEntries)
+        throw std::runtime_error("XcelFormatReader: unreasonable TOC size");
     std::vector<ChunkDescriptor> toc(tocCount);
     for (auto& entry : toc)
     {
@@ -200,37 +274,20 @@ void XcelFormatReader::Read(IStreamSource& source, SceneBuilder& out,
         entry.offset = ReadT<uint64_t>(source);
         entry.size   = ReadT<uint64_t>(source);
         entry.name   = ReadStr(source);
+        if (entry.offset > source.Size() || entry.size > source.Size() - entry.offset)
+            throw std::runtime_error("XcelFormatReader: chunk is outside the stream");
     }
 
-    // Parallel mesh decode.
-    std::vector<std::future<void>> meshFutures;
-    std::mutex                     builderMutex;
-
-    for (auto& entry : toc)
+    // A generic IStreamSource exposes one seek cursor, so decoding is ordered.
+    // File-level parallelism belongs above this API, where independent sources
+    // can be created safely.
+    (void)pool;
+    for (const auto& entry : toc)
     {
         if (entry.type != ChunkType::Mesh) continue;
-
-        auto decode = [&, entry]() {
-            // Each task opens its own FileStreamSource to avoid seek races.
-            // However, Read() receives a generic IStreamSource which might be
-            // a MemoryStreamSource (no reopening). Use mutex for memory sources.
-            // For file-backed sources the caller should pass a FileStreamSource;
-            // parallel seeks on a single FileStreamSource are serialised here.
-            MeshData mesh;
-            {
-                std::scoped_lock lock(builderMutex);
-                source.Seek(entry.offset);
-                mesh = ReadMeshChunk(source);
-            }
-            out.AddMesh(std::move(mesh));
-        };
-
-        if (pool)
-            meshFutures.push_back(pool->Submit(std::move(decode)));
-        else
-            decode();
+        source.Seek(entry.offset);
+        out.AddMesh(ReadMeshChunk(source));
     }
-    for (auto& f : meshFutures) f.get();
 
     // Register animation frame chunk offsets (lazy — don't decode now).
     for (auto& entry : toc)
@@ -289,17 +346,10 @@ void XcelFormatWriter::Write(const SceneDocument& doc, IStreamSink& sink)
         WriteT(sink, entry.size);
         WriteStr(sink, entry.name);
     }
-    sink.Flush();
-
-    // Patch tocOffset in the header.
-    // Note: IStreamSink is write-only; patching requires a seekable sink.
-    // This is handled by FileStreamSink which exposes Tell() but not Seek().
-    // For production use this would need a seekable sink interface; for now
-    // we write tocOffset at the end and the reader seeks to it directly.
-    (void)tocOffsetPos; // suppress unused warning
-    (void)tocOffset;
-    // Workaround: append tocOffset as a trailer so the reader can find it.
+    const uint64_t endOffset = sink.Tell();
+    sink.Seek(tocOffsetPos);
     WriteT(sink, tocOffset);
+    sink.Seek(endOffset);
     sink.Flush();
 }
 

@@ -13,7 +13,8 @@ TessellatedMesh AllFacesStrategy::TessellateRange(
     size_t begin, size_t end, float minS, float maxS) const
 {
     return xcel::TessellateRange(*inp.primitiveSet, *inp.coords, *inp.scalars,
-                                  *inp.colorTable, begin, end, minS, maxS);
+                                  *inp.colorTable, begin, end, minS, maxS,
+                                  inp.scalarOffset);
 }
 
 // ── WettedFacesStrategy ───────────────────────────────────────────────────────
@@ -86,7 +87,9 @@ TessellatedMesh WettedHex(const MeshTessellationInput& inp,
     TessellatedMesh result;
     for (size_t e = begin; e < end; ++e) {
         const auto& elem = ps.Element(e);
-        glm::vec3 rgb = colormap.ColorForElement(e, scalars[e], minS, maxS);
+        const size_t scalarIndex = inp.scalarOffset + e;
+        glm::vec3 rgb = colormap.ColorForElement(
+            scalarIndex, scalars[scalarIndex], minS, maxS);
 
         for (const auto& face : kHexFaces) {
             HexFaceKey key;
@@ -131,7 +134,9 @@ TessellatedMesh WettedTet(const MeshTessellationInput& inp,
     TessellatedMesh result;
     for (size_t e = begin; e < end; ++e) {
         const auto& elem = ps.Element(e);
-        glm::vec3 rgb = colormap.ColorForElement(e, scalars[e], minS, maxS);
+        const size_t scalarIndex = inp.scalarOffset + e;
+        glm::vec3 rgb = colormap.ColorForElement(
+            scalarIndex, scalars[scalarIndex], minS, maxS);
 
         for (const auto& face : kTetFaces) {
             TetFaceKey key;

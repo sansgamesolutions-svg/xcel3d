@@ -169,7 +169,7 @@ bool TranslateManipulator::OnCursorMove(double /*x*/, double /*y*/,
                                          int    /*fbHeight*/,
                                          const Ray&   ray,
                                          Camera&      /*camera*/,
-                                         flecs::world& ecs)
+                                         flecs::world& /*ecs*/)
 {
     if (!m_dragging || m_activeAxis < 0) return false;
 
@@ -183,6 +183,7 @@ bool TranslateManipulator::OnCursorMove(double /*x*/, double /*y*/,
     if (m_selectedEntity.is_alive()) {
         if (auto* tc = m_selectedEntity.get_mut<TransformComponent>()) {
             tc->matrix[3] += glm::vec4(delta, 0.f);
+            m_selectedEntity.modified<TransformComponent>();
         }
     }
     // Move the bounding box too.

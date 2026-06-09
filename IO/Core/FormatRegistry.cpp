@@ -59,4 +59,10 @@ IFormatWriter* FormatRegistry::FindWriter(std::string_view extension) const
     return nullptr;
 }
 
+void FormatRegistry::Clear()
+{
+    m_writers.clear();
+    m_readers.clear();
+}
+
 } // namespace xcel::io

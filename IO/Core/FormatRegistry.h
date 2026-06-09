@@ -26,6 +26,7 @@ public:
     // Returns the first reader that CanRead(ext), or nullptr.
     IFormatReader* FindReader(std::string_view extension) const;
     IFormatWriter* FindWriter(std::string_view extension) const;
+    void           Clear();
 
 private:
     std::vector<std::unique_ptr<IFormatReader, ReaderDeleter>> m_readers;

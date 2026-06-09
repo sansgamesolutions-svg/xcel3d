@@ -216,9 +216,11 @@ void Swapchain::Destroy(VkDevice device)
 void Swapchain::Recreate(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& window, VkRenderPass renderPass)
 {
     int w = 0, h = 0;
+    window.GetFramebufferSize(w, h);
     while (w == 0 || h == 0) {
         window.GetFramebufferSize(w, h);
-        window.WaitEvents();
+        if (w == 0 || h == 0)
+            window.WaitEvents();
     }
     vkDeviceWaitIdle(dev.Device());
     Destroy(dev.Device());

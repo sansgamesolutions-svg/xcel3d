@@ -4,9 +4,28 @@
 #include "IO/Core/SceneBuilder.h"
 #include "IO/Scene/SceneDocument.h"
 #include "Common/ThreadPool.h"
+#include <algorithm>
 #include <stdexcept>
 
 namespace xcel::io {
+
+IOManager::~IOManager()
+{
+    std::vector<std::shared_future<std::shared_ptr<SceneDocument>>> pendingLoads;
+    std::vector<std::shared_future<void>> pendingSaves;
+    {
+        std::scoped_lock lock(m_pendingMutex);
+        pendingLoads = m_pending;
+        pendingSaves = m_pendingSaves;
+    }
+    for (const auto& future : pendingLoads)
+        future.wait();
+    for (const auto& future : pendingSaves)
+        future.wait();
+
+    m_registry.Clear();
+    m_pluginLoader.UnloadAll();
+}
 
 void IOManager::RegisterReader(std::unique_ptr<IFormatReader> reader)
 {
@@ -41,7 +60,9 @@ IOManager::LoadAsync(std::filesystem::path path, xcel::ThreadPool& pool)
     {
         FileStreamSource source(p);
         SceneBuilder     builder;
-        reader->Read(source, builder, &pool);
+        // This task already occupies a worker from pool. Running nested work on
+        // the same pool and waiting for it can deadlock when workers are exhausted.
+        reader->Read(source, builder, nullptr);
         auto doc = builder.Build();
         doc->SetSourcePath(p);
         return doc;
@@ -64,10 +85,15 @@ IOManager::SaveAsync(std::filesystem::path path,
     if (!writer)
         throw std::runtime_error("No writer registered for extension: " + ext);
 
-    return pool.Submit([writer, p = std::move(path), d = std::move(doc)] {
+    auto future = pool.Submit([writer, p = std::move(path), d = std::move(doc)] {
         FileStreamSink sink(p);
         writer->Write(*d, sink);
     }).share();
+    {
+        std::scoped_lock lock(m_pendingMutex);
+        m_pendingSaves.push_back(future);
+    }
+    return future;
 }
 
 void IOManager::Poll(std::vector<std::shared_ptr<SceneDocument>>& out)
@@ -83,6 +109,10 @@ void IOManager::Poll(std::vector<std::shared_ptr<SceneDocument>>& out)
             stillPending.push_back(std::move(f));
     }
     m_pending = std::move(stillPending);
+
+    std::erase_if(m_pendingSaves, [](const auto& future) {
+        return future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+    });
 }
 
 } // namespace xcel::io

@@ -5,6 +5,7 @@
 #include <array>
 #include <future>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
 #include <stdexcept>
 #include <vector>
 
@@ -52,7 +53,7 @@ static TessellatedMesh TessellateHex(
     const CoordTable&      coords,
     const ScalarTable&     scalars,
     const ColorTable&      colormap,
-    size_t begin, size_t end, float minS, float maxS)
+    size_t begin, size_t end, float minS, float maxS, size_t scalarOffset)
 {
     TessellatedMesh result;
     result.vertices.reserve((end - begin) * 24);
@@ -60,7 +61,9 @@ static TessellatedMesh TessellateHex(
 
     for (size_t e = begin; e < end; ++e) {
         const auto& elem = ps.Element(e);
-        glm::vec3 rgb = colormap.ColorForElement(e, scalars[e], minS, maxS);
+        const size_t scalarIndex = scalarOffset + e;
+        glm::vec3 rgb = colormap.ColorForElement(
+            scalarIndex, scalars[scalarIndex], minS, maxS);
 
         for (const auto& face : kHexFaces) {
             glm::vec3 p[4];
@@ -78,7 +81,7 @@ static TessellatedMesh TessellateTetra(
     const CoordTable&      coords,
     const ScalarTable&     scalars,
     const ColorTable&      colormap,
-    size_t begin, size_t end, float minS, float maxS)
+    size_t begin, size_t end, float minS, float maxS, size_t scalarOffset)
 {
     TessellatedMesh result;
     result.vertices.reserve((end - begin) * 12);
@@ -86,7 +89,9 @@ static TessellatedMesh TessellateTetra(
 
     for (size_t e = begin; e < end; ++e) {
         const auto& elem = ps.Element(e);
-        glm::vec3 rgb = colormap.ColorForElement(e, scalars[e], minS, maxS);
+        const size_t scalarIndex = scalarOffset + e;
+        glm::vec3 rgb = colormap.ColorForElement(
+            scalarIndex, scalars[scalarIndex], minS, maxS);
 
         for (const auto& face : kTetFaces) {
             glm::vec3 p[3] = {
@@ -106,7 +111,7 @@ static TessellatedMesh TessellateQuads(
     const CoordTable&       coords,
     const ScalarTable&      scalars,
     const ColorTable&       colormap,
-    size_t begin, size_t end, float minS, float maxS)
+    size_t begin, size_t end, float minS, float maxS, size_t scalarOffset)
 {
     TessellatedMesh result;
     result.vertices.reserve((end - begin) * 4);
@@ -117,7 +122,9 @@ static TessellatedMesh TessellateQuads(
         glm::vec3 p[4];
         for (int k = 0; k < 4; ++k)
             p[k] = coords[elem[k]];
-        glm::vec3 rgb    = colormap.ColorForElement(e, scalars[e], minS, maxS);
+        const size_t scalarIndex = scalarOffset + e;
+        glm::vec3 rgb = colormap.ColorForElement(
+            scalarIndex, scalars[scalarIndex], minS, maxS);
         glm::vec3 normal = glm::normalize(glm::cross(p[1] - p[0], p[3] - p[0]));
         PushQuad(result, p, normal, rgb);
     }
@@ -129,7 +136,7 @@ static TessellatedMesh TessellateTriangles(
     const CoordTable&           coords,
     const ScalarTable&          scalars,
     const ColorTable&           colormap,
-    size_t begin, size_t end, float minS, float maxS)
+    size_t begin, size_t end, float minS, float maxS, size_t scalarOffset)
 {
     TessellatedMesh result;
     result.vertices.reserve((end - begin) * 3);
@@ -138,7 +145,9 @@ static TessellatedMesh TessellateTriangles(
     for (size_t e = begin; e < end; ++e) {
         const auto& tri = ps.Element(e);
         glm::vec3 p[3]  = { coords[tri[0]], coords[tri[1]], coords[tri[2]] };
-        glm::vec3 rgb    = colormap.ColorForElement(e, scalars[e], minS, maxS);
+        const size_t scalarIndex = scalarOffset + e;
+        glm::vec3 rgb = colormap.ColorForElement(
+            scalarIndex, scalars[scalarIndex], minS, maxS);
         glm::vec3 normal = glm::normalize(glm::cross(p[1] - p[0], p[2] - p[0]));
         PushTriangle(result, p, normal, rgb);
     }
@@ -150,7 +159,7 @@ static TessellatedMesh TessellateLines(
     const CoordTable&       coords,
     const ScalarTable&      scalars,
     const ColorTable&       colormap,
-    size_t begin, size_t end, float minS, float maxS)
+    size_t begin, size_t end, float minS, float maxS, size_t scalarOffset)
 {
     TessellatedMesh result;
     result.vertices.reserve((end - begin) * 4);
@@ -158,7 +167,9 @@ static TessellatedMesh TessellateLines(
 
     for (size_t e = begin; e < end; ++e) {
         const auto& seg = ps.Element(e);
-        glm::vec3 rgb   = colormap.ColorForElement(e, scalars[e], minS, maxS);
+        const size_t scalarIndex = scalarOffset + e;
+        glm::vec3 rgb = colormap.ColorForElement(
+            scalarIndex, scalars[scalarIndex], minS, maxS);
         PushLineRibbon(result, coords[seg[0]], coords[seg[1]], rgb);
     }
     return result;
@@ -169,13 +180,15 @@ static TessellatedMesh TessellatePolylines(
     const CoordTable&           coords,
     const ScalarTable&          scalars,
     const ColorTable&           colormap,
-    size_t begin, size_t end, float minS, float maxS)
+    size_t begin, size_t end, float minS, float maxS, size_t scalarOffset)
 {
     TessellatedMesh result;
 
     for (size_t e = begin; e < end; ++e) {
         const auto& pl  = ps.Element(e);
-        glm::vec3   rgb = colormap.ColorForElement(e, scalars[e], minS, maxS);
+        const size_t scalarIndex = scalarOffset + e;
+        glm::vec3 rgb = colormap.ColorForElement(
+            scalarIndex, scalars[scalarIndex], minS, maxS);
         for (size_t i = 0; i + 1 < pl.size(); ++i)
             PushLineRibbon(result, coords[pl[i]], coords[pl[i + 1]], rgb);
     }
@@ -192,27 +205,34 @@ TessellatedMesh TessellateRange(
     size_t              elementBegin,
     size_t              elementEnd,
     float               minScalar,
-    float               maxScalar)
+    float               maxScalar,
+    size_t              scalarOffset)
 {
     switch (ps.Type()) {
     case PrimitiveType::PT_HEXAHEDRON:
         return TessellateHex(static_cast<const HexPrimitiveSet&>(ps),
-            coords, scalars, colormap, elementBegin, elementEnd, minScalar, maxScalar);
+            coords, scalars, colormap, elementBegin, elementEnd,
+            minScalar, maxScalar, scalarOffset);
     case PrimitiveType::PT_TETRAHEDRON:
         return TessellateTetra(static_cast<const TetPrimitiveSet&>(ps),
-            coords, scalars, colormap, elementBegin, elementEnd, minScalar, maxScalar);
+            coords, scalars, colormap, elementBegin, elementEnd,
+            minScalar, maxScalar, scalarOffset);
     case PrimitiveType::PT_QUAD:
         return TessellateQuads(static_cast<const QuadPrimitiveSet&>(ps),
-            coords, scalars, colormap, elementBegin, elementEnd, minScalar, maxScalar);
+            coords, scalars, colormap, elementBegin, elementEnd,
+            minScalar, maxScalar, scalarOffset);
     case PrimitiveType::PT_TRIANGLE:
         return TessellateTriangles(static_cast<const TrianglePrimitiveSet&>(ps),
-            coords, scalars, colormap, elementBegin, elementEnd, minScalar, maxScalar);
+            coords, scalars, colormap, elementBegin, elementEnd,
+            minScalar, maxScalar, scalarOffset);
     case PrimitiveType::PT_LINE:
         return TessellateLines(static_cast<const LinePrimitiveSet&>(ps),
-            coords, scalars, colormap, elementBegin, elementEnd, minScalar, maxScalar);
+            coords, scalars, colormap, elementBegin, elementEnd,
+            minScalar, maxScalar, scalarOffset);
     case PrimitiveType::PT_POLYLINE:
         return TessellatePolylines(static_cast<const PolylinePrimitiveSet&>(ps),
-            coords, scalars, colormap, elementBegin, elementEnd, minScalar, maxScalar);
+            coords, scalars, colormap, elementBegin, elementEnd,
+            minScalar, maxScalar, scalarOffset);
     }
     throw std::runtime_error("TessellateRange: unhandled PrimitiveType");
 }
@@ -224,21 +244,44 @@ TessellatedMesh Tessellate(
     const ColorTable&   colormap)
 {
     return TessellateRange(ps, coords, scalars, colormap,
-        0, ps.ElementCount(), scalars.MinValue(), scalars.MaxValue());
+        0, ps.ElementCount(), scalars.MinValue(), scalars.MaxValue(), 0);
 }
 
 // -- Strategy-based engine ----------------------------------------------------
 
 static constexpr size_t kParallelThreshold = 1'024;
 
+static void ApplyTransform(TessellatedMesh& mesh, const glm::mat4& transform)
+{
+    const glm::mat3 linear(transform);
+    const float determinant = glm::determinant(linear);
+    const glm::mat3 normalMatrix = glm::abs(determinant) > 1e-8f
+        ? glm::inverseTranspose(linear)
+        : linear;
+
+    for (auto& vertex : mesh.vertices) {
+        vertex.position = glm::vec3(transform * glm::vec4(vertex.position, 1.f));
+        const glm::vec3 transformedNormal = normalMatrix * vertex.normal;
+        const float normalLength = glm::length(transformedNormal);
+        if (normalLength > 1e-8f)
+            vertex.normal = transformedNormal / normalLength;
+    }
+}
+
 TessellatedMesh TessellateInput(const MeshTessellationInput& inp, ThreadPool* pool)
 {
+    if (!inp.primitiveSet || !inp.coords || !inp.scalars || !inp.colorTable)
+        throw std::invalid_argument("TessellateInput: incomplete input");
+
     static const AllFacesStrategy defaultStrategy;
     const ITessellationStrategy& s = inp.strategy ? *inp.strategy : defaultStrategy;
 
     float  minS = inp.scalars->MinValue();
     float  maxS = inp.scalars->MaxValue();
     size_t N    = inp.primitiveSet->ElementCount();
+    if (inp.scalarOffset > inp.scalars->Size()
+        || N > inp.scalars->Size() - inp.scalarOffset)
+        throw std::out_of_range("TessellateInput: scalar table is too small");
 
     if (pool && N > kParallelThreshold && s.IsParallelizable()) {
         size_t T         = pool->ThreadCount();
@@ -265,10 +308,13 @@ TessellatedMesh TessellateInput(const MeshTessellationInput& inp, ThreadPool* po
             part.vertices.insert(part.vertices.end(),
                                   partial.vertices.begin(), partial.vertices.end());
         }
+        ApplyTransform(part, inp.transform);
         return part;
     }
 
-    return s.TessellateRange(inp, 0, N, minS, maxS);
+    auto result = s.TessellateRange(inp, 0, N, minS, maxS);
+    ApplyTransform(result, inp.transform);
+    return result;
 }
 
 TessellatedMesh TessellateAndMerge(std::span<const MeshTessellationInput> inputs,

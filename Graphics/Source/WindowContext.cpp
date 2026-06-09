@@ -100,9 +100,12 @@ WindowContext::WindowContext(std::unique_ptr<IWindowWidget> widget)
                             if (hit && *hit < bestT) { bestT = *hit; closest = e; }
                         });
                         // Clear all selections.
-                        m_world.Ecs().each([](flecs::entity e, SelectedComponent&) {
-                            e.remove<SelectedComponent>();
+                        std::vector<flecs::entity> selectedEntities;
+                        m_world.Ecs().each([&](flecs::entity e, const SelectedComponent&) {
+                            selectedEntities.push_back(e);
                         });
+                        for (flecs::entity selected : selectedEntities)
+                            selected.remove<SelectedComponent>();
                         if (closest.is_alive())
                             closest.add<SelectedComponent>();
                     }
@@ -245,35 +248,21 @@ void WindowContext::BuildMeshes()
     std::vector<BbPatch> bbPatches;
     m_world.Ecs().each([&](flecs::entity e, CoordTableComponent& ctc) {
         if (!ctc.coords || ctc.coords->Size() == 0) return;
+        const auto* transformComponent = e.get<TransformComponent>();
+        const glm::mat4 transform = transformComponent
+            ? transformComponent->matrix
+            : glm::mat4(1.f);
         glm::vec3 bbMin(std::numeric_limits<float>::max());
         glm::vec3 bbMax(-std::numeric_limits<float>::max());
         for (const auto& pos : ctc.coords->Data()) {
-            bbMin = glm::min(bbMin, pos);
-            bbMax = glm::max(bbMax, pos);
+            const glm::vec3 worldPos = glm::vec3(transform * glm::vec4(pos, 1.f));
+            bbMin = glm::min(bbMin, worldPos);
+            bbMax = glm::max(bbMax, worldPos);
         }
         bbPatches.push_back({e, {bbMin, bbMax}});
     });
     for (auto& p : bbPatches)
         p.e.set<BoundingBoxComponent>(p.bb);
-
-    struct PageBbPatch { flecs::entity e; glm::vec3 bbMin, bbMax; };
-    std::vector<PageBbPatch> pagePatches;
-    m_world.Ecs().each([&](flecs::entity pageEnt, PageMetaComponent&) {
-        glm::vec3 bbMin(std::numeric_limits<float>::max());
-        glm::vec3 bbMax(-std::numeric_limits<float>::max());
-        m_world.Ecs().each([&](flecs::entity meshEnt, BoundingBoxComponent& bb) {
-            if (meshEnt.has<BelongsToPage>(pageEnt)) {
-                bbMin = glm::min(bbMin, bb.min);
-                bbMax = glm::max(bbMax, bb.max);
-            }
-        });
-        if (bbMin.x <= bbMax.x)
-            pagePatches.push_back({pageEnt, bbMin, bbMax});
-    });
-    for (auto& p : pagePatches) {
-        auto* pm = p.e.get_mut<PageMetaComponent>();
-        if (pm) { pm->aabbMin = p.bbMin; pm->aabbMax = p.bbMax; }
-    }
 }
 
 void WindowContext::UpdateUBO(uint32_t frameIndex)

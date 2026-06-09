@@ -58,7 +58,8 @@ void ViewManipulator::SetViewInfo(const glm::mat4& view, VkExtent2D extent)
     m_instanceBuf.WriteHostVisible(glm::value_ptr(world), sizeof(glm::mat4));
 }
 
-bool ViewManipulator::InCornerRegion(double x, double y, int fbWidth, int fbHeight) const
+bool ViewManipulator::InCornerRegion(
+    double x, double y, int fbWidth, int /*fbHeight*/) const
 {
     return x >= fbWidth  - kSize && x < fbWidth
         && y >= 0        && y < kSize;

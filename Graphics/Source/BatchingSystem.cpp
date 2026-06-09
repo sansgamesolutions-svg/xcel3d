@@ -2,12 +2,31 @@
 #include "Graphics/BatchDrawable.h"
 #include "Graphics/Component.h"
 #include "Common/Logger.h"
+#include <glm/glm.hpp>
+#include <limits>
 #include <unordered_set>
 #include <unordered_map>
 #include <string>
 #include <vector>
 
 namespace xcel {
+
+namespace {
+
+BoundingBoxComponent ComputeBounds(const CoordTable& coords, const glm::mat4& transform)
+{
+    glm::vec3 bbMin(std::numeric_limits<float>::max());
+    glm::vec3 bbMax(-std::numeric_limits<float>::max());
+    for (const auto& position : coords.Data()) {
+        const glm::vec3 worldPosition =
+            glm::vec3(transform * glm::vec4(position, 1.f));
+        bbMin = glm::min(bbMin, worldPosition);
+        bbMax = glm::max(bbMax, worldPosition);
+    }
+    return {bbMin, bbMax};
+}
+
+} // namespace
 
 BatchingSystem::BatchingSystem(uint64_t pageCapacityBytes)
     {
@@ -140,6 +159,15 @@ void BatchingSystem::BuildAll(
                 m_dirtyPages.insert(page.id());
             });
         });
+
+    world.observer<TransformComponent>()
+        .event(flecs::OnSet)
+        .each([this](flecs::entity e, const TransformComponent&) {
+            if (!e.has<PrimitiveSetsComponent>()) return;
+            e.each<BelongsToPage>([this](flecs::entity page) {
+                m_dirtyPages.insert(page.id());
+            });
+        });
 }
 
 // ── Per-page rebuild ──────────────────────────────────────────────────────────
@@ -156,6 +184,8 @@ void BatchingSystem::RebuildPage(flecs::entity pageEntity, ThreadPool* pool)
     PrimitiveType pageType = meta->primitiveType;
 
     std::vector<MeshTessellationInput> inputs;
+    glm::vec3 pageMin(std::numeric_limits<float>::max());
+    glm::vec3 pageMax(-std::numeric_limits<float>::max());
 
     m_world->each([&](flecs::entity e,
                               const PrimitiveSetsComponent& psc,
@@ -169,14 +199,29 @@ void BatchingSystem::RebuildPage(flecs::entity pageEntity, ThreadPool* pool)
 
         const TessellationStrategyComponent* stc = e.get<TessellationStrategyComponent>();
         const ITessellationStrategy* strat = stc ? stc->strategy.get() : nullptr;
+        const TransformComponent* tc = e.get<TransformComponent>();
+        const glm::mat4 transform = tc ? tc->matrix : glm::mat4(1.f);
 
+        if (cc->coords && cc->coords->Size() > 0) {
+            const BoundingBoxComponent bounds = ComputeBounds(*cc->coords, transform);
+            pageMin = glm::min(pageMin, bounds.min);
+            pageMax = glm::max(pageMax, bounds.max);
+            if (auto* entityBounds = e.get_mut<BoundingBoxComponent>())
+                *entityBounds = bounds;
+        }
+
+        size_t scalarOffset = 0;
         for (const auto& ps : psc.sets) {
-            if (ps->Type() != pageType) continue;
-            inputs.push_back({ps.get(),
-                              cc->coords.get(),
-                              sc->scalars.get(),
-                              co->colorTable.get(),
-                              strat});
+            if (ps->Type() == pageType) {
+                inputs.push_back({ps.get(),
+                                  cc->coords.get(),
+                                  sc->scalars.get(),
+                                  co->colorTable.get(),
+                                  strat,
+                                  scalarOffset,
+                                  transform});
+            }
+            scalarOffset += ps->ElementCount();
         }
     });
 
@@ -184,6 +229,16 @@ void BatchingSystem::RebuildPage(flecs::entity pageEntity, ThreadPool* pool)
                    PrimitiveTypeName(pageType), inputs.size());
 
     bd->Rebuild(*m_dev, inputs, pool);
+
+    if (auto* mutableMeta = pageEntity.get_mut<PageMetaComponent>()) {
+        if (pageMin.x <= pageMax.x) {
+            mutableMeta->aabbMin = pageMin;
+            mutableMeta->aabbMax = pageMax;
+        } else {
+            mutableMeta->aabbMin = glm::vec3(0.f);
+            mutableMeta->aabbMax = glm::vec3(0.f);
+        }
+    }
 
     XCEL_LOG_TRACE(Batching, "  -> {} indices", bd->IndexCount());
 }
