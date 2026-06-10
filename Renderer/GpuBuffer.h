@@ -1,5 +1,6 @@
 #pragma once
 #include "Renderer/DeviceContext.h"
+#include <span>
 
 namespace xcel {
 
@@ -22,7 +23,8 @@ public:
         VkMemoryPropertyFlags memProps);
 
     void UploadViaStaging(DeviceContext& dev, const void* data, VkDeviceSize size);
-    void WriteHostVisible(const void* data, VkDeviceSize size);
+    void WriteHostVisible(const void* data, VkDeviceSize size,
+                          VkDeviceSize offset = 0);
     void Destroy(VkDevice device);
 
     VkBuffer     Buffer()     const;
@@ -38,5 +40,16 @@ private:
     VkDeviceSize   m_size   = 0;
     void*          m_mapped = nullptr;
 };
+
+struct GpuBufferUpload
+{
+    GpuBuffer*   destination = nullptr;
+    const void*  data        = nullptr;
+    VkDeviceSize size        = 0;
+};
+
+void UploadGpuBuffersViaStaging(
+    DeviceContext& dev,
+    std::span<const GpuBufferUpload> uploads);
 
 } // namespace xcel

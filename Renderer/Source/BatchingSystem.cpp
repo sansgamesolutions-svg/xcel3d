@@ -170,13 +170,17 @@ void BatchingSystem::RebuildPage(flecs::entity pageEntity, ThreadPool* pool)
         const TessellationStrategyComponent* stc = e.get<TessellationStrategyComponent>();
         const ITessellationStrategy* strat = stc ? stc->strategy.get() : nullptr;
 
+        size_t scalarOffset = 0;
         for (const auto& ps : psc.sets) {
-            if (ps->Type() != pageType) continue;
-            inputs.push_back({ps.get(),
-                              cc->coords.get(),
-                              sc->scalars.get(),
-                              co->colorTable.get(),
-                              strat});
+            if (ps->Type() == pageType) {
+                inputs.push_back({ps.get(),
+                                  cc->coords.get(),
+                                  sc->scalars.get(),
+                                  co->colorTable.get(),
+                                  strat,
+                                  scalarOffset});
+            }
+            scalarOffset += ps->ElementCount();
         }
     });
 

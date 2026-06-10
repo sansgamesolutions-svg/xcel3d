@@ -9,29 +9,45 @@ void BatchDrawable::Rebuild(
     std::span<const MeshTessellationInput> inputs,
     ThreadPool*                            pool)
 {
-    m_vertexBuffer.Destroy(dev.Device());
-    m_indexBuffer.Destroy(dev.Device());
-    m_indexCount = 0;
-
     TessellatedMesh combined = TessellateAndMerge(inputs, pool);
-    if (combined.vertices.empty()) return;
-
-    m_indexCount = static_cast<uint32_t>(combined.indices.size());
+    if (combined.vertices.empty()) {
+        m_vertexBuffer.Destroy(dev.Device());
+        m_indexBuffer.Destroy(dev.Device());
+        m_indexCount = 0;
+        return;
+    }
 
     VkDeviceSize vbSize = combined.vertices.size() * sizeof(MeshVertex);
     VkDeviceSize ibSize = combined.indices.size()  * sizeof(uint32_t);
 
-    m_vertexBuffer.Create(
-        dev.Device(), dev.PhysicalDevice(), vbSize,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    m_vertexBuffer.UploadViaStaging(dev, combined.vertices.data(), vbSize);
+    GpuBuffer vertexBuffer;
+    GpuBuffer indexBuffer;
+    try {
+        vertexBuffer.Create(
+            dev.Device(), dev.PhysicalDevice(), vbSize,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        indexBuffer.Create(
+            dev.Device(), dev.PhysicalDevice(), ibSize,
+            VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    m_indexBuffer.Create(
-        dev.Device(), dev.PhysicalDevice(), ibSize,
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    m_indexBuffer.UploadViaStaging(dev, combined.indices.data(), ibSize);
+        const GpuBufferUpload uploads[] = {
+            {&vertexBuffer, combined.vertices.data(), vbSize},
+            {&indexBuffer, combined.indices.data(), ibSize},
+        };
+        UploadGpuBuffersViaStaging(dev, uploads);
+    } catch (...) {
+        vertexBuffer.Destroy(dev.Device());
+        indexBuffer.Destroy(dev.Device());
+        throw;
+    }
+
+    m_vertexBuffer.Destroy(dev.Device());
+    m_indexBuffer.Destroy(dev.Device());
+    m_vertexBuffer = std::move(vertexBuffer);
+    m_indexBuffer  = std::move(indexBuffer);
+    m_indexCount   = static_cast<uint32_t>(combined.indices.size());
 }
 
 void BatchDrawable::Destroy(VkDevice device)

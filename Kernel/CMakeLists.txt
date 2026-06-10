@@ -1,9 +1,10 @@
 add_library(XcelKernel STATIC
-    Kernel/CoordTable.cpp
-    Kernel/ScalarTable.cpp
-    Kernel/ColorTable.cpp
-    Kernel/MeshTessellator.cpp
-    Kernel/TessellationStrategy.cpp
+    CoordTable.cpp
+    ScalarTable.cpp
+    ColorTable.cpp
+    PrimitiveSet.cpp
+    MeshTessellator.cpp
+    TessellationStrategy.cpp
 )
 
 target_include_directories(XcelKernel
