@@ -20,6 +20,8 @@ struct MeshTessellationInput {
     const ScalarTable*           scalars      = nullptr;
     const ColorTable*            colorTable   = nullptr;
     const ITessellationStrategy* strategy     = nullptr;
+    // Index of this primitive set's first element in the shared scalar/color tables.
+    size_t                       scalarOffset = 0;
 };
 
 // Abstract tessellation strategy. Controls which faces of each element are emitted.

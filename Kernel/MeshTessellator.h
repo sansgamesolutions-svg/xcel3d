@@ -143,7 +143,8 @@ TessellatedMesh TessellateRange(
     size_t              elementBegin,
     size_t              elementEnd,
     float               minScalar,
-    float               maxScalar
+    float               maxScalar,
+    size_t              scalarOffset = 0
 );
 
 // Convenience overload: tessellates all elements and computes min/max internally.

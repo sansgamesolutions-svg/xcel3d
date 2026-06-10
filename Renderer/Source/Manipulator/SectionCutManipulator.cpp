@@ -1,3 +1,4 @@
+#define GLM_ENABLE_EXPERIMENTAL
 #include "Renderer/Manipulator/SectionCutManipulator.h"
 #include "Renderer/Camera.h"
 #include "Renderer/DeviceContext.h"

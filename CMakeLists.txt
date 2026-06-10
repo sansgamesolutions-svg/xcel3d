@@ -5,6 +5,7 @@ project(xcel3d
         LANGUAGES CXX C
 )
 
+include(CTest)
 include(External.cmake)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
@@ -23,6 +24,9 @@ add_subdirectory(Platforms)
 add_subdirectory(Kernel)
 add_subdirectory(Renderer)
 add_subdirectory(IO)
+if(BUILD_TESTING)
+    add_subdirectory(Tests)
+endif()
 
 # ── CMake package install / export ────────────────────────────────────────────
 include(CMakePackageConfigHelpers)

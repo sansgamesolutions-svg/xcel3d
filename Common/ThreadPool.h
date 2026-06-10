@@ -1,5 +1,6 @@
 #pragma once
 #include <condition_variable>
+#include <exception>
 #include <functional>
 #include <future>
 #include <mutex>
@@ -28,11 +29,15 @@ public:
         auto future  = promise->get_future();
 
         Enqueue([p = std::move(promise), t = std::forward<F>(task)]() mutable {
-            if constexpr (std::is_void_v<R>) {
-                t();
-                p->set_value();
-            } else {
-                p->set_value(t());
+            try {
+                if constexpr (std::is_void_v<R>) {
+                    t();
+                    p->set_value();
+                } else {
+                    p->set_value(t());
+                }
+            } catch (...) {
+                p->set_exception(std::current_exception());
             }
         });
 

@@ -100,9 +100,12 @@ WindowContext::WindowContext(std::unique_ptr<IWindowWidget> widget)
                             if (hit && *hit < bestT) { bestT = *hit; closest = e; }
                         });
                         // Clear all selections.
-                        m_world.Ecs().each([](flecs::entity e, SelectedComponent&) {
-                            e.remove<SelectedComponent>();
+                        std::vector<flecs::entity> selectedEntities;
+                        m_world.Ecs().each([&](flecs::entity e, const SelectedComponent&) {
+                            selectedEntities.push_back(e);
                         });
+                        for (flecs::entity selected : selectedEntities)
+                            selected.remove<SelectedComponent>();
                         if (closest.is_alive())
                             closest.add<SelectedComponent>();
                     }

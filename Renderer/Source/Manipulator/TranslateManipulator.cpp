@@ -169,7 +169,7 @@ bool TranslateManipulator::OnCursorMove(double /*x*/, double /*y*/,
                                          int    /*fbHeight*/,
                                          const Ray&   ray,
                                          Camera&      /*camera*/,
-                                         flecs::world& ecs)
+                                         flecs::world& /*ecs*/)
 {
     if (!m_dragging || m_activeAxis < 0) return false;
 

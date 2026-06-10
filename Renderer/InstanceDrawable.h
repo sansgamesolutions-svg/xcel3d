@@ -35,6 +35,7 @@ private:
     GpuBuffer     m_instanceBuffer;
     uint32_t      m_indexCount    = 0;
     uint32_t      m_instanceCount = 0;
+    size_t        m_instanceCapacity = 0;
 };
 
 } // namespace xcel
