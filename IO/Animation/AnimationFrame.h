@@ -1,6 +1,6 @@
 #pragma once
-#include "Graphics/ScalarTable.h"
-#include "Graphics/CoordTable.h"
+#include "Kernel/ScalarTable.h"
+#include "Kernel/CoordTable.h"
 #include <cstdint>
 #include <memory>
 

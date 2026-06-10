@@ -4,10 +4,10 @@
 #include "IO/Scene/MeshData.h"
 #include "IO/Scene/SceneNode.h"
 #include "IO/Scene/SkeletonData.h"
-#include "Graphics/CoordTable.h"
-#include "Graphics/ScalarTable.h"
-#include "Graphics/ColorTable.h"
-#include "Graphics/PrimitiveSet.h"
+#include "Kernel/CoordTable.h"
+#include "Kernel/ScalarTable.h"
+#include "Kernel/ColorTable.h"
+#include "Kernel/PrimitiveSet.h"
 #include "Common/ThreadPool.h"
 
 #include <assimp/Importer.hpp>
