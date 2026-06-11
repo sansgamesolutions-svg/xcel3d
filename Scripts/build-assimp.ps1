@@ -147,6 +147,6 @@ if (Test-Path $LibDir) {
     }
 }
 Write-Host ""
-Write-Host "Configure the project — assimp will be found automatically:"
+Write-Host "Configure the project - assimp will be found automatically:"
 Write-Host "  cmake -S . -B out\build\x64-Debug -G Ninja -DCMAKE_BUILD_TYPE=Debug"
 Write-Host "  cmake --build out\build\x64-Debug"

@@ -2,6 +2,7 @@
 #include "IO/Core/IFormatReader.h"
 #include "IO/Core/IFormatPlugin.h"
 #include "IO/Scene/MeshData.h"
+#include "IO/Scene/SceneNode.h"
 
 struct aiMesh;
 struct aiAnimation;

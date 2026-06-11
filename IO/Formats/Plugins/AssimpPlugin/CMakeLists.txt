@@ -37,11 +37,11 @@ add_library(XcelIO_Assimp SHARED
 
 target_include_directories(XcelIO_Assimp
     PRIVATE
-        "${CMAKE_SOURCE_DIR}"        # lets headers use "IO/..." paths
         "${ASSIMP_INCLUDE_DIR}"
 )
 
 target_link_libraries(XcelIO_Assimp PRIVATE
+    XcelIO                            # SceneBuilder, SceneDocument, and transitively XcelKernel + GLM
     optimized "${ASSIMP_LIB_RELEASE}"
     debug     "${ASSIMP_LIB_DEBUG}"
 )
@@ -65,6 +65,8 @@ if(WIN32)
 endif()
 
 target_compile_features(XcelIO_Assimp PRIVATE cxx_std_20)
+
+xcel_fix_msvc_crt_paths(XcelIO_Assimp)
 
 # Place the DLL alongside XcelViewer.exe so ScanPluginDir(".") finds it.
 set_target_properties(XcelIO_Assimp PROPERTIES
