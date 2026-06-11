@@ -1,8 +1,10 @@
 #include "IO/Core/IOManager.h"
-#include "IO/Scene/SceneDocument.h"
+#include "IO/Core/ISceneReceiver.h"
 #include "Common/ThreadPool.h"
 #include <filesystem>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #ifndef XCEL_TEST_BIN_DIR
 #  define XCEL_TEST_BIN_DIR "."
@@ -19,12 +21,40 @@ void Require(bool condition, const char* message)
         throw std::runtime_error(message);
 }
 
-// Helper: scan plugins then synchronously load one file.
-std::shared_ptr<xcel::io::SceneDocument>
-LoadFile(xcel::io::IOManager& io, const std::filesystem::path& path)
+// Capturing receiver — stores mesh metadata for test assertions.
+struct CapturingReceiver : public xcel::io::ISceneReceiver
 {
+    struct Mesh
+    {
+        std::string name;
+        size_t      vertexCount = 0;
+        size_t      elemCount   = 0;
+    };
+    std::vector<Mesh> meshes;
+
+    void ReceiveMesh(
+        std::string_view            name,
+        std::span<const float>      positions,
+        xcel::PrimitiveType         /*primType*/,
+        std::span<const uint32_t>   indices,
+        uint32_t                    indicesPerElement,
+        std::span<const float>      /*scalars*/) override
+    {
+        meshes.push_back({
+            std::string(name),
+            positions.size() / 3,
+            indices.size() / indicesPerElement
+        });
+    }
+};
+
+// Helper: scan plugins then synchronously load one file.
+CapturingReceiver LoadFile(xcel::io::IOManager& io, const std::filesystem::path& path)
+{
+    CapturingReceiver recv;
     xcel::ThreadPool pool(2);
-    return io.LoadAsync(path, pool).get();
+    io.LoadAsync(path, recv, pool).get();
+    return recv;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -43,9 +73,8 @@ void TestObjLoadReturnsDocument()
     xcel::io::IOManager io;
     io.ScanPluginDir(XCEL_TEST_BIN_DIR);
 
-    auto doc = LoadFile(io, obj);
-    Require(doc != nullptr, "LoadAsync returned null for cube.obj");
-    Require(doc->MeshCount() > 0, "cube.obj document has no meshes");
+    auto recv = LoadFile(io, obj);
+    Require(!recv.meshes.empty(), "LoadAsync produced no meshes for cube.obj");
 }
 
 void TestCubeMeshHasVerticesAndFaces()
@@ -56,19 +85,14 @@ void TestCubeMeshHasVerticesAndFaces()
     xcel::io::IOManager io;
     io.ScanPluginDir(XCEL_TEST_BIN_DIR);
 
-    auto doc = LoadFile(io, obj);
-    Require(doc != nullptr, "document is null");
+    auto recv = LoadFile(io, obj);
+    Require(!recv.meshes.empty(), "document has no meshes");
 
-    const xcel::io::MeshData& mesh = doc->Mesh(0);
-
-    Require(mesh.coords != nullptr, "mesh has no coordinate table");
-    // Assimp may split vertices per face normal; 8 unique verts → up to 24 split.
-    Require(mesh.coords->Size() >= 8, "cube has fewer than 8 vertices");
-
-    Require(!mesh.primSets.empty(), "mesh has no primitive sets");
-    // 6 faces × 2 triangles = 12 triangles minimum.
-    Require(mesh.primSets[0]->ElementCount() >= 12,
-            "cube mesh has fewer than 12 triangles");
+    const auto& mesh = recv.meshes[0];
+    // Assimp may split vertices per face normal; 8 unique verts -> up to 24 split.
+    Require(mesh.vertexCount >= 8, "cube has fewer than 8 vertices");
+    // 6 faces x 2 triangles = 12 triangles minimum.
+    Require(mesh.elemCount >= 12, "cube mesh has fewer than 12 triangles");
 }
 
 void TestMultipleLoadsSamePlugin()
@@ -79,11 +103,12 @@ void TestMultipleLoadsSamePlugin()
     xcel::io::IOManager io;
     io.ScanPluginDir(XCEL_TEST_BIN_DIR);
 
-    auto doc1 = LoadFile(io, obj);
-    auto doc2 = LoadFile(io, obj);
+    auto recv1 = LoadFile(io, obj);
+    auto recv2 = LoadFile(io, obj);
 
-    Require(doc1 != nullptr && doc2 != nullptr, "one of two loads returned null");
-    Require(doc1->MeshCount() == doc2->MeshCount(),
+    Require(!recv1.meshes.empty() && !recv2.meshes.empty(),
+            "one of two loads produced no meshes");
+    Require(recv1.meshes.size() == recv2.meshes.size(),
             "repeated loads of the same file yielded different mesh counts");
 }
 
