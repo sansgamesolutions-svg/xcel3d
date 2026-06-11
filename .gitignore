@@ -2,7 +2,8 @@
 out/
 
 # External dependencies (managed outside the repo)
-External/
+External/*
+!External/CLAUDE.md
 
 # Visual Studio
 .vs/

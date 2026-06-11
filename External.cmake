@@ -32,3 +32,15 @@ FetchContent_MakeAvailable(flecs)
 if(MSVC AND TARGET flecs_static)
     target_compile_options(flecs_static INTERFACE /wd4127)
 endif()
+
+# ── Assimp (optional — enables XcelIO_Assimp plugin) ─────────────────────────
+# Run Scripts/build-assimp.ps1 once to populate External/assimp/.
+# After that, cmake finds it automatically; no -DASSIMP_ROOT flag needed.
+set(_assimp_default "${XCEL_EXTERNAL_ROOT}/assimp")
+if(NOT DEFINED ASSIMP_ROOT AND
+   EXISTS "${_assimp_default}/include/assimp/Importer.hpp")
+    set(ASSIMP_ROOT "${_assimp_default}"
+        CACHE PATH "Assimp install root (auto-detected from External/assimp)" FORCE)
+    message(STATUS "Assimp: auto-detected at ${ASSIMP_ROOT}")
+endif()
+unset(_assimp_default)
