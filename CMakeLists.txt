@@ -7,6 +7,7 @@ project(xcel3d
 
 include(CTest)
 include(External.cmake)
+include(CMake/MsvcX64Crt.cmake)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 

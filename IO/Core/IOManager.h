@@ -57,8 +57,13 @@ public:
     void Poll(std::vector<std::shared_ptr<SceneDocument>>& out);
 
 private:
-    FormatRegistry m_registry;
+    // m_pluginLoader must be declared BEFORE m_registry so it is destroyed
+    // AFTER m_registry. Destruction order is reverse of declaration order.
+    // The registry holds raw function pointers (xcel_destroy_reader) that live
+    // in the plugin DLLs; those DLLs must still be loaded when the registry
+    // calls the deleters — FreeLibrary must happen last.
     PluginLoader   m_pluginLoader;
+    FormatRegistry m_registry;
 
     std::mutex     m_pendingMutex;
     std::vector<std::shared_future<std::shared_ptr<SceneDocument>>> m_pending;
