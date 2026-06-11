@@ -22,6 +22,7 @@
 #include "IO/Core/IOManager.h"
 #include "SceneLoader.h"
 #include "Renderer/Component.h"
+#include <optional>
 #include <glm/glm.hpp>
 #include <atomic>
 #include <chrono>
@@ -67,22 +68,21 @@ static xcel::Entity RouteA_DirectMesh(xcel::Application& app)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Route B: load from a .xcel file and bridge into the World.
-// Pass an empty path to skip (the file may not exist in every environment).
+// Route B: load from any assimp-supported file and bridge into the World.
+// io: caller-owned IOManager (must outlive all ECS objects from this load).
+// pluginDir: directory containing XcelIO_*.dll plugin files.
 // ─────────────────────────────────────────────────────────────────────────────
 static void RouteB_FileLoad(xcel::Application& app,
                             const std::filesystem::path& path,
+                            xcel::io::IOManager& io,
+                            const std::filesystem::path& pluginDir,
                             xcel::ThreadPool& pool)
 {
     if (path.empty() || !std::filesystem::exists(path)) return;
 
-    xcel::io::IOManager io;
-    // Register built-in readers; call io.ScanPluginDir(".") to load plugin DLLs.
+    io.ScanPluginDir(pluginDir);
 
-    auto future = io.LoadAsync(path, pool);
-    future.wait();  // block for this example; in a real app use io.Poll() each frame
-
-    auto doc = future.get();
+    auto doc = io.LoadAsync(path, pool).get();
     if (doc) xcel::io::LoadIntoWorld(*doc, app.GetWorld());
 }
 
@@ -149,40 +149,44 @@ public:
 
 // ─────────────────────────────────────────────────────────────────────────────
 // main
+//   Usage:  XcelViewer [file]
+//   With a file argument: loads the file via the assimp plugin (FBX, GLB, OBJ…).
+//   Without arguments:    shows the built-in demo (Route A + Route C).
 // ─────────────────────────────────────────────────────────────────────────────
-int main()
+int main(int argc, char* argv[])
 {
     try {
-        auto widget = std::make_unique<xcel::GlfwWindowWidget>(1280, 720, "Xcel3D Example");
+        const std::filesystem::path exeDir =
+            std::filesystem::path(argv[0]).parent_path();
+
+        // io must be declared before app so it outlives app's destructor.
+        // ScalarTable, PrimitiveSet, and ColorTable are virtual types whose
+        // vtables live in the plugin DLL. FreeLibrary must not be called until
+        // after the ECS world (inside app) finishes destroying those objects.
+        std::optional<xcel::io::IOManager> io;
+
+        auto widget = std::make_unique<xcel::GlfwWindowWidget>(1280, 720, "Xcel3D Viewer");
         xcel::Application app(std::move(widget));
 
-        // Point to SPIR-V shaders; adjust if running from a different working directory.
         app.SetShaderDir("shaders/");
 
-        // Route A — direct mesh
-        RouteA_DirectMesh(app);
+        if (argc > 1) {
+            io.emplace();
+            xcel::ThreadPool pool(4);
+            RouteB_FileLoad(app, std::filesystem::path(argv[1]),
+                            *io, exeDir, pool);
+            app.GetCamera().FitToSphere({0.f, 0.f, 0.f}, 2.f);
+        } else {
+            RouteA_DirectMesh(app);
+            RouteC_LiveScalars(app);
+            app.AddSystem<AnimateScalarsSystem>();
+            app.GetCamera().FitToSphere({2.5f, 1.f, 1.f}, 3.f);
+        }
 
-        // Route B — file load (skipped when path is empty or file absent)
-        // app needs a ThreadPool for the async load; borrow the one inside app
-        // by calling Init() first if you need the pool, or supply your own.
-        // RouteB_FileLoad(app, "scene.xcel", pool);
-
-        // Route C — live scalars animated by a system each frame
-        RouteC_LiveScalars(app);
-        app.AddSystem<AnimateScalarsSystem>();
-
-        app.GetCamera().FitToSphere({2.5f, 1.f, 1.f}, 3.f);
-
-        // Key light (warm, upper-right) + fill light (cool, lower-left).
         app.GetWorld().AddLight("key",  { 6.f,  6.f,  5.f}, {1.0f, 0.95f, 0.85f}, 1.2f);
         app.GetWorld().AddLight("fill", {-3.f, -2.f, -2.f}, {0.6f, 0.75f, 1.0f},  0.4f);
 
-        // Blocking convenience path (same as old Run()):
         app.Run();
-
-        // --- Embedded / foreign-loop path (e.g. Qt QTimer) ---
-        // app.Init();
-        // while (app.Tick()) { /* Qt can pump its own events here */ }
     }
     catch (const std::exception& e) {
         std::cerr << "Fatal: " << e.what() << "\n";

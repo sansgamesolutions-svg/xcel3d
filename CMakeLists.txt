@@ -25,6 +25,20 @@ add_subdirectory(Platforms)
 add_subdirectory(Kernel)
 add_subdirectory(Renderer)
 add_subdirectory(IO)
+
+# ── Standalone viewer ─────────────────────────────────────────────────────────
+add_executable(XcelViewer Examples/GlfwStandalone/main.cxx)
+target_include_directories(XcelViewer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/Examples/GlfwStandalone
+)
+target_link_libraries(XcelViewer PRIVATE
+    XcelRenderer XcelKernel XcelPlatforms XcelCommon XcelIO
+)
+if(WIN32)
+    target_link_libraries(XcelViewer PRIVATE gdi32 user32 shell32)
+endif()
+xcel_fix_msvc_crt_paths(XcelViewer)
+
 if(BUILD_TESTING)
     add_subdirectory(Tests)
 endif()
