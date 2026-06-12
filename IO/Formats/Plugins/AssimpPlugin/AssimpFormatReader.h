@@ -1,13 +1,8 @@
 #pragma once
 #include "IO/Core/IFormatReader.h"
 #include "IO/Core/IFormatPlugin.h"
-#include "IO/Scene/MeshData.h"
-#include "IO/Scene/SceneNode.h"
 
-struct aiMesh;
 struct aiAnimation;
-struct aiNode;
-struct aiScene;
 
 namespace xcel::io {
 
@@ -18,16 +13,12 @@ public:
     bool CanRead(std::string_view extension) const override;
 
     // Reads the entire source into memory, then hands it to Assimp.
-    void Read(IStreamSource& source, SceneBuilder& out,
+    void Read(IStreamSource& source, ISceneReceiver& receiver,
               xcel::ThreadPool* pool) override;
 
 private:
-    static MeshData ConvertMeshToData(const aiMesh* mesh, uint32_t meshIndex);
-
     static void ConvertAnimation(const aiAnimation* anim, uint32_t animIndex,
-                                 uint32_t meshId, SceneBuilder& out);
-
-    static xcel::io::SceneNode ConvertNode(const aiNode* node);
+                                 uint32_t meshId, ISceneReceiver& receiver);
 };
 
 } // namespace xcel::io

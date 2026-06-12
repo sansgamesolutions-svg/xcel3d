@@ -15,7 +15,7 @@ class XcelFormatReader final : public IFormatReader
 {
 public:
     bool CanRead(std::string_view extension) const override;
-    void Read(IStreamSource& source, SceneBuilder& out,
+    void Read(IStreamSource& source, ISceneReceiver& receiver,
               xcel::ThreadPool* pool) override;
 };
 

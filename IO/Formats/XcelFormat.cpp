@@ -1,9 +1,9 @@
 #include "IO/Formats/XcelFormat.h"
 #include "IO/Core/IStreamSource.h"
 #include "IO/Core/IStreamSink.h"
-#include "IO/Core/SceneBuilder.h"
 #include "IO/Scene/SceneDocument.h"
 #include "IO/Scene/ChunkDescriptor.h"
+#include "IO/Scene/MeshData.h"
 #include "Kernel/CoordTable.h"
 #include "Kernel/ScalarTable.h"
 #include "Kernel/ColorTable.h"
@@ -107,63 +107,52 @@ void WriteMeshChunk(IStreamSink& s, const MeshData& mesh)
     }
 }
 
-MeshData ReadMeshChunk(IStreamSource& s)
+// Reads one mesh chunk and delivers each prim set via receiver.
+// Builds flat arrays so no Kernel polymorphic objects are created here;
+// the receiver (exe-side) allocates those with vtables in the exe.
+void ReadAndDeliverMesh(IStreamSource& s, ISceneReceiver& receiver)
 {
-    MeshData mesh;
-    mesh.name         = ReadStr(s);
-    mesh.coords       = std::make_shared<xcel::CoordTable>();
-    mesh.colorTable   = std::make_shared<xcel::PaletteColor>();
+    std::string name = ReadStr(s);
 
     uint32_t nCoords = ReadT<uint32_t>(s);
-    mesh.coords->Reserve(nCoords);
+    std::vector<float> positions;
+    positions.reserve(nCoords * 3);
     for (uint32_t i = 0; i < nCoords; ++i)
     {
         float x = ReadT<float>(s), y = ReadT<float>(s), z = ReadT<float>(s);
-        mesh.coords->AddCoord({x, y, z});
+        positions.push_back(x);
+        positions.push_back(y);
+        positions.push_back(z);
     }
 
     uint32_t nPrimSets = ReadT<uint32_t>(s);
     for (uint32_t p = 0; p < nPrimSets; ++p)
     {
-        auto type   = static_cast<PrimitiveType>(ReadT<uint8_t>(s));
-        uint32_t nE = ReadT<uint32_t>(s);
+        auto     type = static_cast<PrimitiveType>(ReadT<uint8_t>(s));
+        uint32_t nE   = ReadT<uint32_t>(s);
+
+        uint32_t ipe = 0;
         switch (type)
         {
-        case PrimitiveType::PT_HEXAHEDRON:
-        {
-            auto hs = std::make_shared<HexPrimitiveSet>();
-            for (uint32_t e = 0; e < nE; ++e)
-            {
-                std::array<uint32_t, 8> idx{};
-                for (auto& i : idx) i = ReadT<uint32_t>(s);
-                hs->AddElement(idx);
-            }
-            mesh.primSets.push_back(std::move(hs));
-            break;
+        case PrimitiveType::PT_HEXAHEDRON:  ipe = 8; break;
+        case PrimitiveType::PT_TETRAHEDRON: ipe = 4; break;
+        case PrimitiveType::PT_QUAD:        ipe = 4; break;
+        case PrimitiveType::PT_TRIANGLE:    ipe = 3; break;
+        case PrimitiveType::PT_LINE:        ipe = 2; break;
+        default: break;
         }
-        case PrimitiveType::PT_TRIANGLE:
-        {
-            auto ts = std::make_shared<TrianglePrimitiveSet>();
-            for (uint32_t e = 0; e < nE; ++e)
-            {
-                std::array<uint32_t, 3> idx{};
-                for (auto& i : idx) i = ReadT<uint32_t>(s);
-                ts->AddElement(idx);
-            }
-            mesh.primSets.push_back(std::move(ts));
-            break;
-        }
-        default:
-            break; // Unknown type; skip (no index data written for unknowns above)
-        }
+
+        if (ipe == 0) continue;
+
+        std::vector<uint32_t> indices;
+        indices.reserve(nE * ipe);
+        for (uint32_t e = 0; e < nE; ++e)
+            for (uint32_t k = 0; k < ipe; ++k)
+                indices.push_back(ReadT<uint32_t>(s));
+
+        // Empty scalars span => receiver treats as constant 0.
+        receiver.ReceiveMesh(name, positions, type, indices, ipe, {});
     }
-
-    // Scalar table: constant zero until an animation frame overrides it.
-    size_t totalElems = 0;
-    for (auto& ps : mesh.primSets) totalElems += ps->ElementCount();
-    mesh.scalars = std::make_shared<xcel::ConstantScalarTable>(0.f, totalElems);
-
-    return mesh;
 }
 
 } // namespace
@@ -175,7 +164,7 @@ bool XcelFormatReader::CanRead(std::string_view extension) const
     return extension == "xcel";
 }
 
-void XcelFormatReader::Read(IStreamSource& source, SceneBuilder& out,
+void XcelFormatReader::Read(IStreamSource& source, ISceneReceiver& receiver,
                              xcel::ThreadPool* pool)
 {
     // Validate header.
@@ -203,26 +192,20 @@ void XcelFormatReader::Read(IStreamSource& source, SceneBuilder& out,
     }
 
     // Parallel mesh decode.
+    // ISceneReceiver::ReceiveMesh is called under receiverMutex since the
+    // receiver may not be thread-safe (WorldSceneReceiver modifies the ECS).
     std::vector<std::future<void>> meshFutures;
-    std::mutex                     builderMutex;
+    std::mutex                     receiverMutex;
 
     for (auto& entry : toc)
     {
         if (entry.type != ChunkType::Mesh) continue;
 
         auto decode = [&, entry]() {
-            // Each task opens its own FileStreamSource to avoid seek races.
-            // However, Read() receives a generic IStreamSource which might be
-            // a MemoryStreamSource (no reopening). Use mutex for memory sources.
-            // For file-backed sources the caller should pass a FileStreamSource;
-            // parallel seeks on a single FileStreamSource are serialised here.
-            MeshData mesh;
-            {
-                std::scoped_lock lock(builderMutex);
-                source.Seek(entry.offset);
-                mesh = ReadMeshChunk(source);
-            }
-            out.AddMesh(std::move(mesh));
+            // Seek + read under lock to serialise stream access and receiver calls.
+            std::scoped_lock lock(receiverMutex);
+            source.Seek(entry.offset);
+            ReadAndDeliverMesh(source, receiver);
         };
 
         if (pool)
@@ -231,17 +214,6 @@ void XcelFormatReader::Read(IStreamSource& source, SceneBuilder& out,
             decode();
     }
     for (auto& f : meshFutures) f.get();
-
-    // Register animation frame chunk offsets (lazy — don't decode now).
-    for (auto& entry : toc)
-    {
-        if (entry.type != ChunkType::AnimFrame) continue;
-        // entry.flags holds trackId in upper 16 bits, frameIndex in lower 16.
-        uint32_t trackId    = (entry.flags >> 16) & 0xFFFF;
-        uint32_t frameIndex = entry.flags & 0xFFFF;
-        out.AddAnimationFrameAtOffset(trackId, frameIndex,
-                                      entry.offset, entry.size);
-    }
 }
 
 // ── XcelFormatWriter ────────────────────────────────────────────────────────

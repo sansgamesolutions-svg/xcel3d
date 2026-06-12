@@ -20,9 +20,8 @@
 #include "Renderer/Camera.h"
 #include "Common/ISystem.h"
 #include "IO/Core/IOManager.h"
-#include "SceneLoader.h"
+#include "WorldSceneReceiver.h"
 #include "Renderer/Component.h"
-#include <optional>
 #include <glm/glm.hpp>
 #include <atomic>
 #include <chrono>
@@ -69,21 +68,20 @@ static xcel::Entity RouteA_DirectMesh(xcel::Application& app)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Route B: load from any assimp-supported file and bridge into the World.
-// io: caller-owned IOManager (must outlive all ECS objects from this load).
-// pluginDir: directory containing XcelIO_*.dll plugin files.
+// The IOManager is a plain local; no lifetime workaround needed because
+// WorldSceneReceiver creates all Kernel objects in the exe (vtables safe).
 // ─────────────────────────────────────────────────────────────────────────────
 static void RouteB_FileLoad(xcel::Application& app,
                             const std::filesystem::path& path,
-                            xcel::io::IOManager& io,
-                            const std::filesystem::path& pluginDir,
-                            xcel::ThreadPool& pool)
+                            const std::filesystem::path& pluginDir)
 {
     if (path.empty() || !std::filesystem::exists(path)) return;
 
+    WorldSceneReceiver recv(app.GetWorld());
+    xcel::io::IOManager io;
     io.ScanPluginDir(pluginDir);
-
-    auto doc = io.LoadAsync(path, pool).get();
-    if (doc) xcel::io::LoadIntoWorld(*doc, app.GetWorld());
+    xcel::ThreadPool pool(4);
+    io.LoadAsync(path, recv, pool).get();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,22 +157,13 @@ int main(int argc, char* argv[])
         const std::filesystem::path exeDir =
             std::filesystem::path(argv[0]).parent_path();
 
-        // io must be declared before app so it outlives app's destructor.
-        // ScalarTable, PrimitiveSet, and ColorTable are virtual types whose
-        // vtables live in the plugin DLL. FreeLibrary must not be called until
-        // after the ECS world (inside app) finishes destroying those objects.
-        std::optional<xcel::io::IOManager> io;
-
         auto widget = std::make_unique<xcel::GlfwWindowWidget>(1280, 720, "Xcel3D Viewer");
         xcel::Application app(std::move(widget));
 
         app.SetShaderDir("shaders/");
 
         if (argc > 1) {
-            io.emplace();
-            xcel::ThreadPool pool(4);
-            RouteB_FileLoad(app, std::filesystem::path(argv[1]),
-                            *io, exeDir, pool);
+            RouteB_FileLoad(app, std::filesystem::path(argv[1]), exeDir);
             app.GetCamera().FitToSphere({0.f, 0.f, 0.f}, 2.f);
         } else {
             RouteA_DirectMesh(app);

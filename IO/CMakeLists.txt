@@ -1,10 +1,9 @@
 add_library(XcelIO STATIC
     # Core
     Core/FormatRegistry.cpp
-    Core/SceneBuilder.cpp
     Core/IOManager.cpp
     Core/PluginLoader.cpp
-    # Scene
+    # Scene (write path — SceneDocument used by XcelFormatWriter)
     Scene/SceneDocument.cpp
     # Animation
     Animation/AnimationCatalogue.cpp
