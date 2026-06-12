@@ -4,6 +4,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <array>
+#include <span>
 #include <vector>
 #include <cstddef>
 
@@ -34,13 +35,13 @@ VkShaderModule Pipeline::CreateShaderModule(VkDevice device, const std::vector<c
 }
 
 void Pipeline::Create(
-    VkDevice              device,
-    VkRenderPass          renderPass,
-    VkDescriptorSetLayout descriptorLayout,
-    VkExtent2D            viewportExtent,
-    const std::string&    vertSpvPath,
-    const std::string&    fragSpvPath,
-    const PipelineConfig& config)
+    VkDevice                               device,
+    VkRenderPass                           renderPass,
+    std::span<const VkDescriptorSetLayout> descriptorLayouts,
+    VkExtent2D                             viewportExtent,
+    const std::string&                     vertSpvPath,
+    const std::string&                     fragSpvPath,
+    const PipelineConfig&                  config)
 {
     auto vertCode = LoadSpirV(vertSpvPath);
     auto fragCode = LoadSpirV(fragSpvPath);
@@ -75,8 +76,8 @@ void Pipeline::Create(
 
     std::array<VkVertexInputBindingDescription, 2> bindings = {binding, instanceBinding};
 
-    // Attributes 0-2: per-vertex geometry. Attributes 3-6: per-instance mat4 rows.
-    std::array<VkVertexInputAttributeDescription, 7> attrs{};
+    // Attributes 0-2: per-vertex geometry. Attributes 3-6: per-instance mat4 rows. 7: UV.
+    std::array<VkVertexInputAttributeDescription, 8> attrs{};
     attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT,    offsetof(MeshVertex, position)};
     attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT,    offsetof(MeshVertex, normal)};
     attrs[2] = {2, 0, VK_FORMAT_R32G32B32_SFLOAT,    offsetof(MeshVertex, color)};
@@ -84,6 +85,7 @@ void Pipeline::Create(
     attrs[4] = {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16};
     attrs[5] = {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32};
     attrs[6] = {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48};
+    attrs[7] = {7, 0, VK_FORMAT_R32G32_SFLOAT,       offsetof(MeshVertex, texCoord)};
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -150,8 +152,8 @@ void Pipeline::Create(
 
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount         = (descriptorLayout != VK_NULL_HANDLE) ? 1u : 0u;
-    layoutInfo.pSetLayouts            = &descriptorLayout;
+    layoutInfo.setLayoutCount         = static_cast<uint32_t>(descriptorLayouts.size());
+    layoutInfo.pSetLayouts            = descriptorLayouts.data();
     layoutInfo.pushConstantRangeCount = 1;
     layoutInfo.pPushConstantRanges    = &pcRange;
 
@@ -188,6 +190,19 @@ void Pipeline::Create(
 
     vkDestroyShaderModule(device, vertMod, nullptr);
     vkDestroyShaderModule(device, fragMod, nullptr);
+}
+
+void Pipeline::Create(
+    VkDevice              device,
+    VkRenderPass          renderPass,
+    VkDescriptorSetLayout descriptorLayout,
+    VkExtent2D            viewportExtent,
+    const std::string&    vertSpvPath,
+    const std::string&    fragSpvPath,
+    const PipelineConfig& config)
+{
+    const std::array<VkDescriptorSetLayout, 1> layouts = {descriptorLayout};
+    Create(device, renderPass, std::span{layouts}, viewportExtent, vertSpvPath, fragSpvPath, config);
 }
 
 void Pipeline::Destroy(VkDevice device)

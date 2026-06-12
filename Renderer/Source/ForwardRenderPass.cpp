@@ -4,6 +4,8 @@
 #include "Renderer/GpuBuffer.h"
 #include <stdexcept>
 #include <array>
+#include <span>
+#include <vector>
 
 namespace xcel {
 
@@ -19,15 +21,28 @@ VkRenderPass ForwardRenderPass::GetRenderPass() const
     return m_renderPass.GetHandle();
 }
 
+static std::vector<VkDescriptorSetLayout> MakeLayouts(
+    VkDescriptorSetLayout ubo,
+    VkDescriptorSetLayout bindless)
+{
+    std::vector<VkDescriptorSetLayout> layouts;
+    layouts.push_back(ubo);
+    if (bindless != VK_NULL_HANDLE)
+        layouts.push_back(bindless);
+    return layouts;
+}
+
 void ForwardRenderPass::Build(const BuildPassInfo& info)
 {
     m_descriptorLayout = info.uboLayout;
+    m_bindlessLayout   = info.bindlessLayout;
     m_shaderDir        = info.shaderDir;
 
+    auto layouts = MakeLayouts(info.uboLayout, info.bindlessLayout);
     m_pipeline.Create(
         info.dev->Device(),
         info.forwardRenderPass,
-        info.uboLayout,
+        std::span{layouts},
         info.extent,
         info.shaderDir + "mesh.vert.spv",
         info.shaderDir + "mesh.frag.spv");
@@ -36,10 +51,11 @@ void ForwardRenderPass::Build(const BuildPassInfo& info)
 void ForwardRenderPass::Rebuild(DeviceContext& dev, VkExtent2D newExtent)
 {
     m_pipeline.Destroy(dev.Device());
+    auto layouts = MakeLayouts(m_descriptorLayout, m_bindlessLayout);
     m_pipeline.Create(
         dev.Device(),
         m_renderPass.GetHandle(),
-        m_descriptorLayout,
+        std::span{layouts},
         newExtent,
         m_shaderDir + "mesh.vert.spv",
         m_shaderDir + "mesh.frag.spv");
@@ -81,6 +97,11 @@ void ForwardRenderPass::Record(VkCommandBuffer cmd, PassContext& ctx)
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             m_pipeline.PipelineLayout(),
                             0, 1, &ctx.uboDescriptorSet, 0, nullptr);
+
+    if (ctx.bindlessDescriptorSet != VK_NULL_HANDLE)
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                m_pipeline.PipelineLayout(),
+                                1, 1, &ctx.bindlessDescriptorSet, 0, nullptr);
 
     if (ctx.indirectDrawCount > 0 && ctx.drawCountBuffer != VK_NULL_HANDLE) {
         // Indirect path: FrustumCullPass has populated per-slot indirect cmd + count buffers.

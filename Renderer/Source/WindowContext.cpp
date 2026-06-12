@@ -178,6 +178,16 @@ void WindowContext::AddSystemImpl(std::unique_ptr<ISystem> system)
     m_systems.push_back(std::move(system));
 }
 
+uint32_t WindowContext::UploadTexture(uint32_t width, uint32_t height, const void* pixels)
+{
+    return m_textures.Upload(m_vulkan.PrimaryDevice(), width, height, pixels);
+}
+
+void WindowContext::FreeTexture(uint32_t index)
+{
+    m_textures.Free(m_vulkan.PrimaryDevice().Device(), index);
+}
+
 size_t         WindowContext::DeviceCount() const { return m_vulkan.DeviceCount(); }
 DeviceContext& WindowContext::GetDevice(size_t i) const { return m_vulkan.Device(i); }
 
@@ -195,6 +205,7 @@ void WindowContext::InitVulkan()
 
     DeviceContext& dev = m_vulkan.PrimaryDevice();
     m_descriptors.Create(dev);
+    m_textures.Create(dev);
 
     m_renderGraph = RenderGraphBuilder{}
         .SetOptions(m_passOptions)
@@ -202,6 +213,7 @@ void WindowContext::InitVulkan()
         .SetSurface(m_vulkan.Surface())
         .SetWindow(*m_widget)
         .SetDescriptors(m_descriptors)
+        .SetTextures(m_textures)
         .SetShaderDir(m_shaderDir.string())
         .Build(dev);
 
@@ -332,6 +344,7 @@ void WindowContext::DrawFrame()
             .SetSurface(m_vulkan.Surface())
             .SetWindow(*m_widget)
             .SetDescriptors(m_descriptors)
+            .SetTextures(m_textures)
             .SetShaderDir(m_shaderDir.string())
             .Build(dev);
         m_graphDirty = false;
@@ -357,7 +370,7 @@ void WindowContext::DrawFrame()
         else if (bb) { dc.aabbMin = bb->min;     dc.aabbMax = bb->max;     }
         if (const auto* mat = e.get<MaterialComponent>())
             dc.material = {mat->ambientFactor, mat->diffuseFactor,
-                           mat->specularFactor, mat->shininess};
+                           mat->specularFactor, mat->shininess, mat->textureIndex};
         drawCalls.push_back(dc);
     });
     const uint32_t  currentFrame = m_renderGraph.CurrentFrame();
@@ -380,6 +393,7 @@ void WindowContext::DrawFrame()
 
     PassContext ctx{};
     ctx.uboDescriptorSet           = m_descriptors.DescriptorSet(currentFrame);
+    ctx.bindlessDescriptorSet      = m_textures.DescriptorSet();
     ctx.directDrawCalls            = drawCalls;
     ctx.viewProj                   = viewProj;
     ctx.manipulatorSolidDrawCalls  = m_manipulatorSolidDraws;
@@ -405,6 +419,7 @@ void WindowContext::Cleanup()
         m_manipulators.Destroy(device);
         m_renderGraph.Destroy(device);
         m_defaultInstanceBuffer.Destroy(device);
+        m_textures.Destroy(device);
         m_descriptors.Destroy(device);
         m_swapchain.Destroy(device);
 

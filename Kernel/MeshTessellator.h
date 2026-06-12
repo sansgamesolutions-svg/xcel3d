@@ -55,11 +55,13 @@ struct MeshTessellationInput; // full definition in TessellationStrategy.h
 //   location 0 -- vec3 position  (byte offset  0, 12 bytes)
 //   location 1 -- vec3 normal    (byte offset 12, 12 bytes)
 //   location 2 -- vec3 color     (byte offset 24, 12 bytes)
-//   total stride: 36 bytes
+//   location 7 -- vec2 texCoord  (byte offset 36,  8 bytes)
+//   total stride: 44 bytes
 struct MeshVertex {
     glm::vec3 position;
-    glm::vec3 normal;   // flat face normal; same for all verts of a quad face
-    glm::vec3 color;    // RGB from ColorTable; uniform per element
+    glm::vec3 normal;            // flat face normal; same for all verts of a quad face
+    glm::vec3 color;             // RGB from ColorTable; uniform per element
+    glm::vec2 texCoord{0.f, 0.f};
 };
 
 // Triangle list ready for direct upload to a device-local VkBuffer pair.

@@ -1,8 +1,10 @@
 #version 450
+#extension GL_EXT_nonuniform_qualifier : require
 
 layout(location = 0) in vec3 fragPos;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec3 fragColor;
+layout(location = 3) in vec2 fragTexCoord;
 
 layout(location = 0) out vec4 outColor;
 
@@ -21,11 +23,15 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     vec4     sectionPlane; // xyz=world-normal, w=d; length(xyz)==0 means disabled
 } ubo;
 
+layout(set = 1, binding = 0) uniform texture2D textures[];
+layout(set = 1, binding = 1) uniform sampler   texSampler;
+
 layout(push_constant) uniform MaterialPC {
     float ambientFactor;
     float diffuseFactor;
     float specularFactor;
     float shininess;
+    uint  textureIndex;   // 0xFFFFFFFF = no texture; use fragColor
 } mat;
 
 void main() {
@@ -33,10 +39,15 @@ void main() {
         dot(fragPos, ubo.sectionPlane.xyz) + ubo.sectionPlane.w < 0.0)
         discard;
 
+    vec3 albedo = fragColor;
+    if (mat.textureIndex != 0xFFFFFFFFu)
+        albedo = texture(sampler2D(textures[nonuniformEXT(mat.textureIndex)], texSampler),
+                         fragTexCoord).rgb;
+
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(ubo.viewPos - fragPos);
 
-    vec3 result = mat.ambientFactor * fragColor;
+    vec3 result = mat.ambientFactor * albedo;
 
     for (uint i = 0u; i < ubo.lightCount; ++i) {
         vec3  lPos   = ubo.lights[i].positionAndIntensity.xyz;
@@ -48,7 +59,7 @@ void main() {
         float diff = max(dot(N, L), 0.0);
         float spec = pow(max(dot(N, H), 0.0), mat.shininess);
 
-        result += (diff * mat.diffuseFactor * fragColor
+        result += (diff * mat.diffuseFactor * albedo
                  + spec * mat.specularFactor) * lColor * lInten;
     }
 

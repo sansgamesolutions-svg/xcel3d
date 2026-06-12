@@ -9,7 +9,7 @@ set(SHADER_MANIP_FRAG_SPV "${SHADER_OUTPUT_DIR}/manipulator.frag.spv")
 add_custom_command(
     OUTPUT "${SHADER_VERT_SPV}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_OUTPUT_DIR}"
-    COMMAND "${GLSLC_EXECUTABLE}" "${SHADER_SOURCE_DIR}/mesh.vert" -o "${SHADER_VERT_SPV}"
+    COMMAND "${GLSLC_EXECUTABLE}" --target-env=vulkan1.2 "${SHADER_SOURCE_DIR}/mesh.vert" -o "${SHADER_VERT_SPV}"
     DEPENDS "${SHADER_SOURCE_DIR}/mesh.vert"
     VERBATIM
 )
@@ -17,7 +17,7 @@ add_custom_command(
 add_custom_command(
     OUTPUT "${SHADER_FRAG_SPV}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_OUTPUT_DIR}"
-    COMMAND "${GLSLC_EXECUTABLE}" "${SHADER_SOURCE_DIR}/mesh.frag" -o "${SHADER_FRAG_SPV}"
+    COMMAND "${GLSLC_EXECUTABLE}" --target-env=vulkan1.2 "${SHADER_SOURCE_DIR}/mesh.frag" -o "${SHADER_FRAG_SPV}"
     DEPENDS "${SHADER_SOURCE_DIR}/mesh.frag"
     VERBATIM
 )
@@ -49,6 +49,8 @@ add_custom_command(
 add_library(XcelRenderer STATIC
     Source/DeviceContext.cpp
     Source/GpuBuffer.cpp
+    Source/GpuImage.cpp
+    Source/TextureManager.cpp
     Source/RenderPass.cpp
     Source/Pipeline.cpp
     Source/DescriptorManager.cpp

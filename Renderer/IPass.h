@@ -11,10 +11,11 @@ namespace xcel {
 
 struct PassContext
 {
-    uint32_t               frameIndex           = 0;
-    VkFramebuffer          swapchainFramebuffer = VK_NULL_HANDLE;
-    VkExtent2D             extent               = {};
-    VkDescriptorSet        uboDescriptorSet     = VK_NULL_HANDLE;
+    uint32_t               frameIndex              = 0;
+    VkFramebuffer          swapchainFramebuffer    = VK_NULL_HANDLE;
+    VkExtent2D             extent                  = {};
+    VkDescriptorSet        uboDescriptorSet        = VK_NULL_HANDLE;
+    VkDescriptorSet        bindlessDescriptorSet   = VK_NULL_HANDLE;  // set=1; VK_NULL_HANDLE = no textures
     std::span<const DrawCall> directDrawCalls;
 
     // Clip-from-world matrix (proj * view). Used by FrustumCullPass to extract planes.
@@ -37,6 +38,7 @@ struct BuildPassInfo
     DeviceContext*        dev               = nullptr;
     VkRenderPass          forwardRenderPass = VK_NULL_HANDLE;
     VkDescriptorSetLayout uboLayout         = VK_NULL_HANDLE;
+    VkDescriptorSetLayout bindlessLayout    = VK_NULL_HANDLE;  // set=1; VK_NULL_HANDLE = no textures
     VkExtent2D            extent            = {};
     uint32_t              framesInFlight    = 2;
     uint32_t              maxObjects        = 0;

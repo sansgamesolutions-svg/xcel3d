@@ -3,6 +3,7 @@
 #include "Renderer/PassOptions.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/DescriptorManager.h"
+#include "Renderer/TextureManager.h"
 #include "Platforms/IWindowWidget.h"
 #include <string>
 
@@ -21,6 +22,7 @@ public:
     RenderGraphBuilder& SetSurface(VkSurfaceKHR surface);
     RenderGraphBuilder& SetWindow(IWindowWidget& window);
     RenderGraphBuilder& SetDescriptors(DescriptorManager& descriptors);
+    RenderGraphBuilder& SetTextures(TextureManager& textures);
     RenderGraphBuilder& SetShaderDir(const std::string& dir);
     RenderGraphBuilder& SetMaxObjects(uint32_t maxObjects);
 
@@ -32,6 +34,7 @@ private:
     VkSurfaceKHR       m_surface     = VK_NULL_HANDLE;
     IWindowWidget*     m_window      = nullptr;
     DescriptorManager* m_descriptors = nullptr;
+    TextureManager*    m_textures    = nullptr;
     std::string        m_shaderDir   = "shaders/";
     uint32_t           m_maxObjects  = 65536;
 };

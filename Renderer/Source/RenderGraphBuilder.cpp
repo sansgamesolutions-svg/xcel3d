@@ -11,6 +11,7 @@ RenderGraphBuilder& RenderGraphBuilder::SetSwapchain(Swapchain& sc)             
 RenderGraphBuilder& RenderGraphBuilder::SetSurface(VkSurfaceKHR s)              { m_surface     = s;           return *this; }
 RenderGraphBuilder& RenderGraphBuilder::SetWindow(IWindowWidget& w)             { m_window      = &w;          return *this; }
 RenderGraphBuilder& RenderGraphBuilder::SetDescriptors(DescriptorManager& d)    { m_descriptors = &d;          return *this; }
+RenderGraphBuilder& RenderGraphBuilder::SetTextures(TextureManager& t)          { m_textures    = &t;          return *this; }
 RenderGraphBuilder& RenderGraphBuilder::SetShaderDir(const std::string& dir)    { m_shaderDir   = dir;         return *this; }
 RenderGraphBuilder& RenderGraphBuilder::SetMaxObjects(uint32_t n)               { m_maxObjects  = n;           return *this; }
 
@@ -41,6 +42,7 @@ RenderGraph RenderGraphBuilder::Build(DeviceContext& dev)
     info.dev              = &dev;
     info.forwardRenderPass = forwardPass->GetRenderPass();
     info.uboLayout        = m_descriptors->Layout();
+    info.bindlessLayout   = m_textures ? m_textures->Layout() : VK_NULL_HANDLE;
     info.extent           = m_swapchain->Extent();
     info.framesInFlight   = RenderGraph::MAX_FRAMES;
     info.maxObjects       = m_maxObjects;

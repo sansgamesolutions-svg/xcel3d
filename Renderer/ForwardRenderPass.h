@@ -27,6 +27,7 @@ private:
     RenderPass            m_renderPass;
     Pipeline              m_pipeline;
     VkDescriptorSetLayout m_descriptorLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout m_bindlessLayout   = VK_NULL_HANDLE;
     std::string           m_shaderDir;
 };
 
