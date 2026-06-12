@@ -98,11 +98,13 @@ struct LightComponent {
 
 // ── Per-mesh material component ─────────────────────────────────────────────
 // Optional; mesh entities without this component use the built-in defaults.
+// textureIndex = 0xFFFFFFFF means no texture (sentinel from TextureManager::NO_TEXTURE).
 struct MaterialComponent {
-    float ambientFactor  = 0.15f;
-    float diffuseFactor  = 1.0f;
-    float specularFactor = 0.4f;
-    float shininess      = 32.0f;
+    float    ambientFactor  = 0.15f;
+    float    diffuseFactor  = 1.0f;
+    float    specularFactor = 0.4f;
+    float    shininess      = 32.0f;
+    uint32_t textureIndex   = 0xFFFFFFFFu;
 };
 
 // ── Selection tag ────────────────────────────────────────────────────────────

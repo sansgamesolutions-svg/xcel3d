@@ -4,6 +4,7 @@
 #include "Renderer/VulkanContext.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/DescriptorManager.h"
+#include "Renderer/TextureManager.h"
 #include "Renderer/Camera.h"
 #include "Renderer/RenderGraph.h"
 #include "Renderer/GpuBuffer.h"
@@ -34,6 +35,10 @@ public:
 
     void SetPassOptions(const PassOptions& opts);
     void SetShaderDir(std::filesystem::path dir);
+
+    // Upload RGBA8 pixels from CPU; returns opaque texture index for use in MaterialComponent.
+    uint32_t UploadTexture(uint32_t width, uint32_t height, const void* pixels);
+    void     FreeTexture(uint32_t index);
 
     // Two-phase API for embedding in a foreign event loop.
     // Call Init() once, then Tick() each frame (returns false when the window
@@ -84,6 +89,7 @@ private:
     // Rendering
     Swapchain         m_swapchain;
     DescriptorManager m_descriptors;
+    TextureManager    m_textures;
     Camera            m_camera;
     RenderGraph       m_renderGraph;
     GpuBuffer         m_defaultInstanceBuffer;

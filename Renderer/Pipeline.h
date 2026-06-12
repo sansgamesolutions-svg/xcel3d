@@ -1,5 +1,6 @@
 #pragma once
 #include <vulkan/vulkan.h>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,17 @@ public:
     Pipeline(const Pipeline&)            = delete;
     Pipeline& operator=(const Pipeline&) = delete;
 
+    // Primary overload: accepts any number of descriptor set layouts (set=0, set=1, …).
+    void Create(
+        VkDevice                               device,
+        VkRenderPass                           renderPass,
+        std::span<const VkDescriptorSetLayout> descriptorLayouts,
+        VkExtent2D                             viewportExtent,
+        const std::string&                     vertSpvPath,
+        const std::string&                     fragSpvPath,
+        const PipelineConfig&                  config = {});
+
+    // Backward-compatible single-layout overload. ManipulatorPass uses this.
     void Create(
         VkDevice              device,
         VkRenderPass          renderPass,
