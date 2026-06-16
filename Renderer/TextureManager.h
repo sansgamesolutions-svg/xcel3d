@@ -2,6 +2,7 @@
 #include "Renderer/DeviceContext.h"
 #include "Renderer/GpuImage.h"
 #include <vulkan/vulkan.h>
+#include <optional>
 #include <vector>
 #include <cstdint>
 
@@ -30,8 +31,7 @@ public:
     VkDescriptorSet       DescriptorSet() const;
 
 private:
-    std::vector<GpuImage>    m_images;
-    std::vector<bool>        m_occupied;
+    std::vector<std::optional<GpuImage>> m_slots;
     VkSampler                m_sampler = VK_NULL_HANDLE;
     VkDescriptorSetLayout    m_layout  = VK_NULL_HANDLE;
     VkDescriptorPool         m_pool    = VK_NULL_HANDLE;

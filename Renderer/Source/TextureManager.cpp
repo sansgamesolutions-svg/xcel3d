@@ -7,8 +7,7 @@ namespace xcel {
 
 void TextureManager::Create(DeviceContext& dev)
 {
-    m_images.resize(MAX_TEXTURES);
-    m_occupied.assign(MAX_TEXTURES, false);
+    m_slots.resize(MAX_TEXTURES);
 
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType                   = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -93,10 +92,9 @@ void TextureManager::Create(DeviceContext& dev)
 
 void TextureManager::Destroy(VkDevice device)
 {
-    for (auto& img : m_images)
-        img.Destroy(device);
-    m_images.clear();
-    m_occupied.clear();
+    for (auto& slot : m_slots)
+        if (slot) slot->Destroy(device);
+    m_slots.clear();
 
     m_set = VK_NULL_HANDLE; // freed with the pool
 
@@ -122,7 +120,7 @@ uint32_t TextureManager::Upload(
 {
     uint32_t slot = NO_TEXTURE;
     for (uint32_t i = 0; i < MAX_TEXTURES; ++i) {
-        if (!m_occupied[i]) { slot = i; break; }
+        if (!m_slots[i]) { slot = i; break; }
     }
     if (slot == NO_TEXTURE)
         throw std::runtime_error("TextureManager: MAX_TEXTURES slots exhausted");
@@ -136,7 +134,7 @@ uint32_t TextureManager::Upload(
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     staging.WriteHostVisible(pixels, imageSize);
 
-    m_images[slot].Create(
+    m_slots[slot].emplace().Create(
         dev, width, height,
         VK_FORMAT_R8G8B8A8_SRGB,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -150,7 +148,7 @@ uint32_t TextureManager::Upload(
     toTransfer.newLayout                       = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     toTransfer.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
     toTransfer.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-    toTransfer.image                           = m_images[slot].Image();
+    toTransfer.image                           = m_slots[slot]->Image();
     toTransfer.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
     toTransfer.subresourceRange.baseMipLevel   = 0;
     toTransfer.subresourceRange.levelCount     = 1;
@@ -174,7 +172,7 @@ uint32_t TextureManager::Upload(
     region.imageOffset                     = {0, 0, 0};
     region.imageExtent                     = {width, height, 1};
 
-    vkCmdCopyBufferToImage(cmd, staging.Buffer(), m_images[slot].Image(),
+    vkCmdCopyBufferToImage(cmd, staging.Buffer(), m_slots[slot]->Image(),
                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
     VkImageMemoryBarrier toShader      = toTransfer;
@@ -192,7 +190,7 @@ uint32_t TextureManager::Upload(
 
     VkDescriptorImageInfo imgInfo{};
     imgInfo.sampler     = VK_NULL_HANDLE;
-    imgInfo.imageView   = m_images[slot].ImageView();
+    imgInfo.imageView   = m_slots[slot]->ImageView();
     imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkWriteDescriptorSet write{};
@@ -206,15 +204,14 @@ uint32_t TextureManager::Upload(
 
     vkUpdateDescriptorSets(dev.Device(), 1, &write, 0, nullptr);
 
-    m_occupied[slot] = true;
     return slot;
 }
 
 void TextureManager::Free(VkDevice device, uint32_t index)
 {
-    if (index >= MAX_TEXTURES || !m_occupied[index]) return;
-    m_images[index].Destroy(device);
-    m_occupied[index] = false;
+    if (index >= MAX_TEXTURES || !m_slots[index]) return;
+    m_slots[index]->Destroy(device);
+    m_slots[index].reset();
 }
 
 VkDescriptorSetLayout TextureManager::Layout()        const { return m_layout; }
