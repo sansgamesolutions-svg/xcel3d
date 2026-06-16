@@ -98,10 +98,11 @@ void DeviceContext::Create(VkPhysicalDevice physDev, VkSurfaceKHR surface, bool 
 
     VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
     indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-    indexingFeatures.descriptorBindingPartiallyBound           = VK_TRUE;
-    indexingFeatures.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
-    indexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-    indexingFeatures.runtimeDescriptorArray                    = VK_TRUE;
+    indexingFeatures.descriptorBindingPartiallyBound                 = VK_TRUE;
+    indexingFeatures.descriptorBindingUpdateUnusedWhilePending       = VK_TRUE;
+    indexingFeatures.descriptorBindingSampledImageUpdateAfterBind    = VK_TRUE;
+    indexingFeatures.shaderSampledImageArrayNonUniformIndexing       = VK_TRUE;
+    indexingFeatures.runtimeDescriptorArray                          = VK_TRUE;
 
     VkPhysicalDeviceFeatures features{};
     VkDeviceCreateInfo createInfo{};

@@ -13,6 +13,7 @@ struct PassContext
 {
     uint32_t               frameIndex              = 0;
     VkFramebuffer          swapchainFramebuffer    = VK_NULL_HANDLE;
+    VkFramebuffer          overlayFramebuffer      = VK_NULL_HANDLE;
     VkExtent2D             extent                  = {};
     VkDescriptorSet        uboDescriptorSet        = VK_NULL_HANDLE;
     VkDescriptorSet        bindlessDescriptorSet   = VK_NULL_HANDLE;  // set=1; VK_NULL_HANDLE = no textures
@@ -37,6 +38,7 @@ struct BuildPassInfo
 {
     DeviceContext*        dev               = nullptr;
     VkRenderPass          forwardRenderPass = VK_NULL_HANDLE;
+    VkRenderPass          overlayRenderPass = VK_NULL_HANDLE;
     VkDescriptorSetLayout uboLayout         = VK_NULL_HANDLE;
     VkDescriptorSetLayout bindlessLayout    = VK_NULL_HANDLE;  // set=1; VK_NULL_HANDLE = no textures
     VkExtent2D            extent            = {};

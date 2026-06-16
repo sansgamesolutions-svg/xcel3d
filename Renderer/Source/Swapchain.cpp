@@ -127,9 +127,10 @@ void Swapchain::CreateDepthResources(DeviceContext& dev)
         throw std::runtime_error("Swapchain: vkCreateImageView (depth) failed");
 }
 
-void Swapchain::CreateFramebuffers(VkDevice device, VkRenderPass renderPass)
+void Swapchain::CreateFramebuffersInto(VkDevice device, VkRenderPass renderPass,
+                                        std::vector<VkFramebuffer>& out)
 {
-    m_framebuffers.resize(m_imageViews.size());
+    out.resize(m_imageViews.size());
     for (size_t i = 0; i < m_imageViews.size(); ++i) {
         std::array<VkImageView, 2> attachments = {m_imageViews[i], m_depthImageView};
         VkFramebufferCreateInfo info{};
@@ -140,12 +141,18 @@ void Swapchain::CreateFramebuffers(VkDevice device, VkRenderPass renderPass)
         info.width           = m_extent.width;
         info.height          = m_extent.height;
         info.layers          = 1;
-        if (vkCreateFramebuffer(device, &info, nullptr, &m_framebuffers[i]) != VK_SUCCESS)
+        if (vkCreateFramebuffer(device, &info, nullptr, &out[i]) != VK_SUCCESS)
             throw std::runtime_error("Swapchain: vkCreateFramebuffer failed");
     }
 }
 
-void Swapchain::Create(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& window, VkRenderPass renderPass)
+void Swapchain::CreateFramebuffers(VkDevice device, VkRenderPass renderPass)
+{
+    CreateFramebuffersInto(device, renderPass, m_framebuffers);
+}
+
+void Swapchain::Create(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& window,
+                       VkRenderPass renderPass, VkRenderPass overlayRenderPass)
 {
     auto support         = QuerySupport(dev.PhysicalDevice(), surface);
     auto fmt             = ChooseSurfaceFormat(support.formats);
@@ -193,10 +200,17 @@ void Swapchain::Create(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& 
     CreateImageViews(dev.Device());
     CreateDepthResources(dev);
     CreateFramebuffers(dev.Device(), renderPass);
+    if (overlayRenderPass != VK_NULL_HANDLE) {
+        m_overlayRenderPass = overlayRenderPass;
+        CreateFramebuffersInto(dev.Device(), overlayRenderPass, m_overlayFramebuffers);
+    }
 }
 
 void Swapchain::Destroy(VkDevice device)
 {
+    for (auto fb : m_overlayFramebuffers) vkDestroyFramebuffer(device, fb, nullptr);
+    m_overlayFramebuffers.clear();
+    m_overlayRenderPass = VK_NULL_HANDLE;
     for (auto fb : m_framebuffers)   vkDestroyFramebuffer(device, fb, nullptr);
     if (m_depthImageView != VK_NULL_HANDLE) vkDestroyImageView(device, m_depthImageView, nullptr);
     if (m_depthImage     != VK_NULL_HANDLE) vkDestroyImage(device, m_depthImage, nullptr);
@@ -213,7 +227,8 @@ void Swapchain::Destroy(VkDevice device)
     m_swapchain      = VK_NULL_HANDLE;
 }
 
-void Swapchain::Recreate(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& window, VkRenderPass renderPass)
+void Swapchain::Recreate(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& window,
+                          VkRenderPass renderPass, VkRenderPass overlayRenderPass)
 {
     int w = 0, h = 0;
     while (w == 0 || h == 0) {
@@ -222,13 +237,14 @@ void Swapchain::Recreate(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget
     }
     vkDeviceWaitIdle(dev.Device());
     Destroy(dev.Device());
-    Create(dev, surface, window, renderPass);
+    Create(dev, surface, window, renderPass, overlayRenderPass);
 }
 
-VkSwapchainKHR Swapchain::GetHandle()          const { return m_swapchain; }
-VkFormat       Swapchain::ImageFormat()        const { return m_imageFormat; }
-VkExtent2D     Swapchain::Extent()             const { return m_extent; }
-uint32_t       Swapchain::ImageCount()         const { return (uint32_t)m_imageViews.size(); }
-VkFramebuffer  Swapchain::Framebuffer(uint32_t i) const { return m_framebuffers[i]; }
+VkSwapchainKHR Swapchain::GetHandle()                    const { return m_swapchain; }
+VkFormat       Swapchain::ImageFormat()                  const { return m_imageFormat; }
+VkExtent2D     Swapchain::Extent()                       const { return m_extent; }
+uint32_t       Swapchain::ImageCount()                   const { return (uint32_t)m_imageViews.size(); }
+VkFramebuffer  Swapchain::Framebuffer(uint32_t i)         const { return m_framebuffers[i]; }
+VkFramebuffer  Swapchain::OverlayFramebuffer(uint32_t i)  const { return m_overlayFramebuffers[i]; }
 
 } // namespace xcel

@@ -28,8 +28,10 @@ public:
     void Record(VkCommandBuffer cmd, PassContext& ctx) override;
     void Destroy(VkDevice device)                    override;
 
+    void         CreateOverlayRenderPass(VkDevice device, VkFormat color, VkFormat depth);
+    VkRenderPass GetRenderPass() const;
+
 private:
-    void CreateOverlayRenderPass(VkDevice device, VkFormat color, VkFormat depth);
     void CreatePipelines(VkDevice device,
                          VkDescriptorSetLayout uboLayout,
                          VkExtent2D extent,
