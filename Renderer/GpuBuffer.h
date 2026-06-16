@@ -30,10 +30,11 @@ public:
     VkBuffer     Buffer()     const;
     VkDeviceSize BufferSize() const;
 
+    static uint32_t FindMemoryType(VkPhysicalDevice      physicalDevice,
+                                   uint32_t              typeFilter,
+                                   VkMemoryPropertyFlags properties);
+
 private:
-    uint32_t FindMemoryType(VkPhysicalDevice physicalDevice,
-                            uint32_t         typeFilter,
-                            VkMemoryPropertyFlags properties);
 
     VkBuffer       m_buffer = VK_NULL_HANDLE;
     VkDeviceMemory m_memory = VK_NULL_HANDLE;

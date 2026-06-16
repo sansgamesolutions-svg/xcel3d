@@ -1,4 +1,5 @@
 #include "Renderer/GpuImage.h"
+#include "Renderer/GpuBuffer.h"
 #include <stdexcept>
 #include <utility>
 
@@ -18,21 +19,6 @@ GpuImage& GpuImage::operator=(GpuImage&& other) noexcept
         m_imageView = std::exchange(other.m_imageView, VK_NULL_HANDLE);
     }
     return *this;
-}
-
-static uint32_t FindImageMemoryType(
-    VkPhysicalDevice      physDev,
-    uint32_t              typeFilter,
-    VkMemoryPropertyFlags props)
-{
-    VkPhysicalDeviceMemoryProperties memProps;
-    vkGetPhysicalDeviceMemoryProperties(physDev, &memProps);
-    for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-        if ((typeFilter & (1u << i)) &&
-            (memProps.memoryTypes[i].propertyFlags & props) == props)
-            return i;
-    }
-    throw std::runtime_error("GpuImage: no suitable memory type");
 }
 
 void GpuImage::Create(
@@ -68,7 +54,7 @@ void GpuImage::Create(
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize  = memReq.size;
-    allocInfo.memoryTypeIndex = FindImageMemoryType(
+    allocInfo.memoryTypeIndex = GpuBuffer::FindMemoryType(
         dev.PhysicalDevice(), memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     if (vkAllocateMemory(dev.Device(), &allocInfo, nullptr, &m_memory) != VK_SUCCESS) {

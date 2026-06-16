@@ -102,6 +102,9 @@ private:
     std::vector<std::unique_ptr<ISystem>> m_systems;
     ThreadPool                            m_pool;
 
+    // Per-frame draw call lists (reused across frames to avoid heap alloc)
+    std::vector<DrawCall> m_drawCalls;
+
     // Manipulators and picking
     ManipulatorController m_manipulators;
     std::vector<DrawCall> m_manipulatorSolidDraws;

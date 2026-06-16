@@ -353,7 +353,7 @@ void WindowContext::DrawFrame()
     m_renderGraph.WaitForCurrentFrame(dev.Device());
     m_world.FlushRebuild(&m_pool);
 
-    std::vector<DrawCall> drawCalls;
+    m_drawCalls.clear();
     m_world.Ecs().each([&](flecs::entity e, MeshComponent& mc, VisibilityComponent& vc) {
         if (!vc.visible || mc.mesh->IndexCount() == 0) return;
         const GpuBuffer* instBuf   = mc.mesh->InstanceBuffer();
@@ -371,7 +371,7 @@ void WindowContext::DrawFrame()
         if (const auto* mat = e.get<MaterialComponent>())
             dc.material = {mat->ambientFactor, mat->diffuseFactor,
                            mat->specularFactor, mat->shininess, mat->textureIndex};
-        drawCalls.push_back(dc);
+        m_drawCalls.push_back(dc);
     });
     const uint32_t  currentFrame = m_renderGraph.CurrentFrame();
 
@@ -386,7 +386,7 @@ void WindowContext::DrawFrame()
     m_manipulatorAlphaDraws.clear();
     m_manipulators.GatherDrawCalls(m_manipulatorSolidDraws, m_manipulatorAlphaDraws);
 
-    if (drawCalls.empty() && m_manipulatorSolidDraws.empty() && m_manipulatorAlphaDraws.empty())
+    if (m_drawCalls.empty() && m_manipulatorSolidDraws.empty() && m_manipulatorAlphaDraws.empty())
         return;
 
     UpdateUBO(currentFrame);
@@ -394,7 +394,7 @@ void WindowContext::DrawFrame()
     PassContext ctx{};
     ctx.uboDescriptorSet           = m_descriptors.DescriptorSet(currentFrame);
     ctx.bindlessDescriptorSet      = m_textures.DescriptorSet();
-    ctx.directDrawCalls            = drawCalls;
+    ctx.directDrawCalls            = m_drawCalls;
     ctx.viewProj                   = viewProj;
     ctx.manipulatorSolidDrawCalls  = m_manipulatorSolidDraws;
     ctx.manipulatorAlphaDrawCalls  = m_manipulatorAlphaDraws;
