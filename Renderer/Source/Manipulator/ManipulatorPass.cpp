@@ -87,6 +87,7 @@ void ManipulatorPass::CreatePipelines(VkDevice              device,
     solidCfg.depthTestEnable  = false;
     solidCfg.depthWriteEnable = false;
     solidCfg.alphaBlend       = false;
+    solidCfg.includeTexCoord  = false;
     solidCfg.cullMode         = VK_CULL_MODE_NONE;
     solidCfg.pushConstantSize = sizeof(ManipulatorPC);
 
