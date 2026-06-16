@@ -11,6 +11,7 @@ struct PipelineConfig
     bool            depthTestEnable  = true;
     bool            depthWriteEnable = true;
     bool            alphaBlend       = false;
+    bool            includeTexCoord  = true;   // set false when shader has no location 7
     VkCullModeFlags cullMode         = VK_CULL_MODE_BACK_BIT;
     // Push-constant size in bytes (fragment stage). 0 = no push constant.
     uint32_t        pushConstantSize = 0;

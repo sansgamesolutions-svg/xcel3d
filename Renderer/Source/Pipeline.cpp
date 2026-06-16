@@ -76,7 +76,7 @@ void Pipeline::Create(
 
     std::array<VkVertexInputBindingDescription, 2> bindings = {binding, instanceBinding};
 
-    // Attributes 0-2: per-vertex geometry. Attributes 3-6: per-instance mat4 rows. 7: UV.
+    // Attributes 0-2: per-vertex geometry. Attributes 3-6: per-instance mat4 rows. 7: UV (optional).
     std::array<VkVertexInputAttributeDescription, 8> attrs{};
     attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT,    offsetof(MeshVertex, position)};
     attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT,    offsetof(MeshVertex, normal)};
@@ -86,12 +86,13 @@ void Pipeline::Create(
     attrs[5] = {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32};
     attrs[6] = {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48};
     attrs[7] = {7, 0, VK_FORMAT_R32G32_SFLOAT,       offsetof(MeshVertex, texCoord)};
+    const uint32_t attrCount = config.includeTexCoord ? 8u : 7u;
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInput.vertexBindingDescriptionCount   = (uint32_t)bindings.size();
     vertexInput.pVertexBindingDescriptions      = bindings.data();
-    vertexInput.vertexAttributeDescriptionCount = (uint32_t)attrs.size();
+    vertexInput.vertexAttributeDescriptionCount = attrCount;
     vertexInput.pVertexAttributeDescriptions    = attrs.data();
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
