@@ -36,9 +36,18 @@ void RenderGraph::Build(DeviceContext& dev,
 
     for (uint32_t i = 0; i < MAX_FRAMES; ++i) {
         if (vkCreateSemaphore(dev.Device(), &semInfo,   nullptr, &m_imageAvailableSem[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(dev.Device(), &semInfo,   nullptr, &m_renderFinishedSem[i]) != VK_SUCCESS ||
             vkCreateFence    (dev.Device(), &fenceInfo, nullptr, &m_inFlightFence[i])     != VK_SUCCESS)
             throw std::runtime_error("RenderGraph: failed to create sync objects");
+    }
+
+    // One render-finished semaphore per swapchain image: the semaphore is passed to
+    // vkQueuePresentKHR and may be held by the presentation engine until that image is
+    // re-acquired.  Indexing by imageIndex (not frame) ensures we never signal a
+    // semaphore that is still waited on by an in-flight presentation.
+    m_renderFinishedSem.resize(swapchain.ImageCount());
+    for (auto& sem : m_renderFinishedSem) {
+        if (vkCreateSemaphore(dev.Device(), &semInfo, nullptr, &sem) != VK_SUCCESS)
+            throw std::runtime_error("RenderGraph: failed to create render-finished semaphore");
     }
 
     for (auto& pass : m_passes)
@@ -102,7 +111,7 @@ void RenderGraph::Execute(DeviceContext& dev, PassContext ctx, bool& outNeedsRes
     submitInfo.commandBufferCount   = 1;
     submitInfo.pCommandBuffers      = &cmd;
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores    = &m_renderFinishedSem[frame];
+    submitInfo.pSignalSemaphores    = &m_renderFinishedSem[imageIndex];
 
     if (vkQueueSubmit(dev.GraphicsQueue(), 1, &submitInfo, m_inFlightFence[frame]) != VK_SUCCESS)
         throw std::runtime_error("RenderGraph: vkQueueSubmit failed");
@@ -112,7 +121,7 @@ void RenderGraph::Execute(DeviceContext& dev, PassContext ctx, bool& outNeedsRes
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores    = &m_renderFinishedSem[frame];
+    presentInfo.pWaitSemaphores    = &m_renderFinishedSem[imageIndex];
     presentInfo.swapchainCount     = 1;
     presentInfo.pSwapchains        = &sc;
     presentInfo.pImageIndices      = &imageIndex;
@@ -137,13 +146,16 @@ void RenderGraph::Resize(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget
 void RenderGraph::Destroy(VkDevice device)
 {
     for (int i = static_cast<int>(MAX_FRAMES) - 1; i >= 0; --i) {
-        if (m_renderFinishedSem[i] != VK_NULL_HANDLE)
-            vkDestroySemaphore(device, m_renderFinishedSem[i], nullptr);
         if (m_imageAvailableSem[i] != VK_NULL_HANDLE)
             vkDestroySemaphore(device, m_imageAvailableSem[i], nullptr);
         if (m_inFlightFence[i] != VK_NULL_HANDLE)
             vkDestroyFence(device, m_inFlightFence[i], nullptr);
     }
+    for (auto& sem : m_renderFinishedSem) {
+        if (sem != VK_NULL_HANDLE)
+            vkDestroySemaphore(device, sem, nullptr);
+    }
+    m_renderFinishedSem.clear();
 
     if (m_cmdPool != VK_NULL_HANDLE)
         vkFreeCommandBuffers(device, m_cmdPool, MAX_FRAMES, m_cmdBuffers.data());
@@ -154,7 +166,6 @@ void RenderGraph::Destroy(VkDevice device)
 
     // Reset handles to guard against double-destroy
     for (uint32_t i = 0; i < MAX_FRAMES; ++i) {
-        m_renderFinishedSem[i] = VK_NULL_HANDLE;
         m_imageAvailableSem[i] = VK_NULL_HANDLE;
         m_inFlightFence[i]     = VK_NULL_HANDLE;
         m_cmdBuffers[i]        = VK_NULL_HANDLE;

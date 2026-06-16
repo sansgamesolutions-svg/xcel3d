@@ -44,7 +44,7 @@ private:
 
     std::array<VkCommandBuffer, MAX_FRAMES> m_cmdBuffers        = {};
     std::array<VkSemaphore, MAX_FRAMES>     m_imageAvailableSem = {};
-    std::array<VkSemaphore, MAX_FRAMES>     m_renderFinishedSem = {};
+    std::vector<VkSemaphore>                m_renderFinishedSem;   // one per swapchain image
     std::array<VkFence, MAX_FRAMES>         m_inFlightFence     = {};
     uint32_t                                m_currentFrame      = 0;
 };
