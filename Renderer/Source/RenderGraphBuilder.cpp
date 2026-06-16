@@ -31,24 +31,30 @@ RenderGraph RenderGraphBuilder::Build(DeviceContext& dev)
     for (const auto& f : support.formats)
         if (f.format == VK_FORMAT_B8G8R8A8_SRGB) { colorFmt = f.format; break; }
 
-    // Create the forward render pass first so its VkRenderPass handle is available
-    // before the swapchain framebuffers are created.
+    // Create forward and overlay render passes before the swapchain so both sets
+    // of framebuffers are created with the correct compatible render pass.
     auto forwardPass = std::make_unique<ForwardRenderPass>();
     forwardPass->CreateRenderPass(dev, colorFmt, VK_FORMAT_D32_SFLOAT);
 
-    m_swapchain->Recreate(dev, m_surface, *m_window, forwardPass->GetRenderPass());
+    auto manipPass = std::make_unique<ManipulatorPass>();
+    manipPass->CreateOverlayRenderPass(dev.Device(), colorFmt, VK_FORMAT_D32_SFLOAT);
+
+    m_swapchain->Recreate(dev, m_surface, *m_window,
+                          forwardPass->GetRenderPass(),
+                          manipPass->GetRenderPass());
 
     BuildPassInfo info{};
-    info.dev              = &dev;
+    info.dev               = &dev;
     info.forwardRenderPass = forwardPass->GetRenderPass();
-    info.uboLayout        = m_descriptors->Layout();
-    info.bindlessLayout   = m_textures ? m_textures->Layout() : VK_NULL_HANDLE;
-    info.extent           = m_swapchain->Extent();
-    info.framesInFlight   = RenderGraph::MAX_FRAMES;
-    info.maxObjects       = m_maxObjects;
-    info.shaderDir        = m_shaderDir;
-    info.colorFormat      = colorFmt;
-    info.depthFormat      = VK_FORMAT_D32_SFLOAT;
+    info.overlayRenderPass = manipPass->GetRenderPass();
+    info.uboLayout         = m_descriptors->Layout();
+    info.bindlessLayout    = m_textures ? m_textures->Layout() : VK_NULL_HANDLE;
+    info.extent            = m_swapchain->Extent();
+    info.framesInFlight    = RenderGraph::MAX_FRAMES;
+    info.maxObjects        = m_maxObjects;
+    info.shaderDir         = m_shaderDir;
+    info.colorFormat       = colorFmt;
+    info.depthFormat       = VK_FORMAT_D32_SFLOAT;
 
     std::vector<std::unique_ptr<IPass>> passes;
 
@@ -58,7 +64,7 @@ RenderGraph RenderGraphBuilder::Build(DeviceContext& dev)
     (void)m_options.occlusionCulling;
 
     passes.push_back(std::move(forwardPass));
-    passes.push_back(std::make_unique<ManipulatorPass>());
+    passes.push_back(std::move(manipPass));
 
     RenderGraph graph;
     graph.Build(dev, *m_swapchain, info, std::move(passes));

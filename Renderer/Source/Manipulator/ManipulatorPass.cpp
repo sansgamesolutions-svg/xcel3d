@@ -112,7 +112,8 @@ void ManipulatorPass::Build(const BuildPassInfo& info)
     m_colorFmt  = info.colorFormat;
     m_depthFmt  = info.depthFormat;
 
-    CreateOverlayRenderPass(m_device, m_colorFmt, m_depthFmt);
+    if (m_renderPass == VK_NULL_HANDLE)
+        CreateOverlayRenderPass(m_device, m_colorFmt, m_depthFmt);
     CreatePipelines(m_device, m_uboLayout, info.extent, m_shaderDir);
 
     // Identity matrix instance buffer used for draws that supply no instance data.
@@ -139,7 +140,7 @@ void ManipulatorPass::Record(VkCommandBuffer cmd, PassContext& ctx)
     VkRenderPassBeginInfo rpInfo{};
     rpInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     rpInfo.renderPass        = m_renderPass;
-    rpInfo.framebuffer       = ctx.swapchainFramebuffer;
+    rpInfo.framebuffer       = ctx.overlayFramebuffer;
     rpInfo.renderArea.offset = {0, 0};
     rpInfo.renderArea.extent = ctx.extent;
     rpInfo.clearValueCount   = 0; // no clear — we LOAD
@@ -231,6 +232,8 @@ void ManipulatorPass::Record(VkCommandBuffer cmd, PassContext& ctx)
 
     vkCmdEndRenderPass(cmd);
 }
+
+VkRenderPass ManipulatorPass::GetRenderPass() const { return m_renderPass; }
 
 void ManipulatorPass::Destroy(VkDevice device)
 {

@@ -14,6 +14,7 @@ void RenderGraph::Build(DeviceContext& dev,
 {
     m_swapchain         = &swapchain;
     m_forwardRenderPass = info.forwardRenderPass;
+    m_overlayRenderPass = info.overlayRenderPass;
     m_cmdPool           = dev.GraphicsCommandPool();
     m_passes            = std::move(passes);
 
@@ -72,6 +73,9 @@ void RenderGraph::Execute(DeviceContext& dev, PassContext ctx, bool& outNeedsRes
 
     ctx.frameIndex           = frame;
     ctx.swapchainFramebuffer = m_swapchain->Framebuffer(imageIndex);
+    ctx.overlayFramebuffer   = m_overlayRenderPass != VK_NULL_HANDLE
+                                   ? m_swapchain->OverlayFramebuffer(imageIndex)
+                                   : VK_NULL_HANDLE;
     ctx.extent               = m_swapchain->Extent();
 
     VkCommandBuffer cmd = m_cmdBuffers[frame];
@@ -124,7 +128,7 @@ void RenderGraph::Execute(DeviceContext& dev, PassContext ctx, bool& outNeedsRes
 
 void RenderGraph::Resize(DeviceContext& dev, VkSurfaceKHR surface, IWindowWidget& window)
 {
-    m_swapchain->Recreate(dev, surface, window, m_forwardRenderPass);
+    m_swapchain->Recreate(dev, surface, window, m_forwardRenderPass, m_overlayRenderPass);
     const VkExtent2D newExtent = m_swapchain->Extent();
     for (auto& pass : m_passes)
         pass->Rebuild(dev, newExtent);

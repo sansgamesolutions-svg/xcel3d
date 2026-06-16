@@ -37,6 +37,7 @@ public:
 private:
     Swapchain*   m_swapchain         = nullptr;
     VkRenderPass m_forwardRenderPass = VK_NULL_HANDLE;
+    VkRenderPass m_overlayRenderPass = VK_NULL_HANDLE;
     VkCommandPool m_cmdPool          = VK_NULL_HANDLE;
 
     std::vector<std::unique_ptr<IPass>> m_passes;
