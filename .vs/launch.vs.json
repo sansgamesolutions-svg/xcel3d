@@ -1,0 +1,43 @@
+{
+  "version": "0.2.1",
+  "configurations": [
+    {
+      "type": "default",
+      "project": "CMakeLists.txt",
+      "projectTarget": "XcelViewer.exe (Examples/GlfwStandalone/main.cxx)",
+      "name": "XcelViewer (Windows)",
+      "currentDir": "${cmake.buildRoot}/bin",
+      "environment": [
+        {
+          "name": "VK_LAYER_PATH",
+          "value": "${env.VULKAN_SDK}/Bin"
+        }
+      ]
+    },
+    {
+      "type": "cppdbg",
+      "name": "XcelViewer (Linux Debug)",
+      "project": "CMakeLists.txt",
+      "projectTarget": "XcelViewer",
+      "program": "${debugInfo.target}",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${debugInfo.target_dir}",
+      "environment": [
+        {
+          "name": "VK_LAYER_PATH",
+          "value": "${env.VULKAN_SDK}/share/vulkan/explicit_layer.d"
+        }
+      ],
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    }
+  ]
+}

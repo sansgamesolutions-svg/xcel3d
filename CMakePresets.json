@@ -1,0 +1,130 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}"
+    },
+
+    {
+      "name": "windows-debug",
+      "displayName": "Windows x64 Debug",
+      "description": "MSVC · Debug · Vulkan validation layers on",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": ["Windows"],
+          "intelliSenseMode": "windows-msvc-x64"
+        }
+      }
+    },
+
+    {
+      "name": "windows-release",
+      "displayName": "Windows x64 Release",
+      "description": "MSVC · RelWithDebInfo",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": ["Windows"],
+          "intelliSenseMode": "windows-msvc-x64"
+        }
+      }
+    },
+
+    {
+      "name": "linux-debug",
+      "displayName": "Linux x64 Debug (GCC)",
+      "description": "GCC · Debug.  Linux prerequisites: sudo apt install libvulkan-dev libglfw3-dev libglm-dev glslc ninja-build",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_C_COMPILER": "gcc"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": ["Linux"],
+          "intelliSenseMode": "linux-gcc-x64"
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/${sourceDirName}/src"
+        }
+      }
+    },
+
+    {
+      "name": "linux-release",
+      "displayName": "Linux x64 Release (GCC)",
+      "description": "GCC · RelWithDebInfo",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_C_COMPILER": "gcc"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": ["Linux"],
+          "intelliSenseMode": "linux-gcc-x64"
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/${sourceDirName}/src"
+        }
+      }
+    },
+
+    {
+      "name": "linux-clang-debug",
+      "displayName": "Linux x64 Debug (Clang)",
+      "description": "Clang · Debug.  Extra prerequisite: sudo apt install clang",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_C_COMPILER": "clang"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": ["Linux"],
+          "intelliSenseMode": "linux-clang-x64"
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/${sourceDirName}/src"
+        }
+      }
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "windows-debug",    "configurePreset": "windows-debug",    "displayName": "Windows Debug"      },
+    { "name": "windows-release",  "configurePreset": "windows-release",  "displayName": "Windows Release"    },
+    { "name": "linux-debug",      "configurePreset": "linux-debug",      "displayName": "Linux GCC Debug"    },
+    { "name": "linux-release",    "configurePreset": "linux-release",    "displayName": "Linux GCC Release"  },
+    { "name": "linux-clang-debug","configurePreset": "linux-clang-debug","displayName": "Linux Clang Debug"  }
+  ],
+
+  "testPresets": [
+    {
+      "name": "windows-debug",
+      "configurePreset": "windows-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "linux-debug",
+      "configurePreset": "linux-debug",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

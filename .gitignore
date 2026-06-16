@@ -5,8 +5,9 @@ out/
 External/*
 !External/CLAUDE.md
 
-# Visual Studio
-.vs/
+# Visual Studio — ignore user-specific files; track shared launch settings
+.vs/*
+!.vs/launch.vs.json
 *.user
 *.suo
 *.VC.db
