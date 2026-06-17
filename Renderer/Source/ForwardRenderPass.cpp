@@ -1,4 +1,5 @@
 #include "Renderer/ForwardRenderPass.h"
+#include "Renderer/RenderGraphConfig.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/GpuBuffer.h"
@@ -32,19 +33,21 @@ static std::vector<VkDescriptorSetLayout> MakeLayouts(
     return layouts;
 }
 
-static PipelineConfig MakeBlendConfig(
-    VkBlendFactor srcColor,
-    VkBlendFactor dstColor,
-    VkBlendFactor srcAlpha = VK_BLEND_FACTOR_ONE,
-    VkBlendFactor dstAlpha = VK_BLEND_FACTOR_ZERO)
+static PipelineConfig MakePipelineConfig(const PipelineDescriptor& desc)
 {
     PipelineConfig cfg{};
-    cfg.depthWriteEnable = false;
-    cfg.alphaBlend       = true;
-    cfg.srcColorFactor   = srcColor;
-    cfg.dstColorFactor   = dstColor;
-    cfg.srcAlphaFactor   = srcAlpha;
-    cfg.dstAlphaFactor   = dstAlpha;
+    cfg.depthTestEnable  = desc.depthTest;
+    cfg.depthWriteEnable = desc.depthWrite;
+    cfg.cullMode         = desc.cullMode;
+    cfg.pushConstantSize = static_cast<uint32_t>(sizeof(MaterialData));
+    if (desc.blendMode != BlendMode::Opaque)
+    {
+        cfg.alphaBlend     = true;
+        cfg.srcColorFactor = desc.srcColor;
+        cfg.dstColorFactor = desc.dstColor;
+        cfg.srcAlphaFactor = desc.srcAlpha;
+        cfg.dstAlphaFactor = desc.dstAlpha;
+    }
     return cfg;
 }
 
@@ -54,65 +57,52 @@ void ForwardRenderPass::Build(const BuildPassInfo& info)
     m_bindlessLayout   = info.bindlessLayout;
     m_shaderDir        = info.shaderDir;
 
-    auto layouts = MakeLayouts(info.uboLayout, info.bindlessLayout);
+    const ForwardPassConfig& fwdCfg = info.forwardConfig
+        ? *info.forwardConfig
+        : RenderGraphConfig::Default().passes[1].forwardConfig.value();
 
-    const std::string vert = info.shaderDir + "mesh.vert.spv";
-    const std::string frag = info.shaderDir + "mesh.frag.spv";
-    const VkDevice    dev  = info.dev->Device();
+    m_clearColor    = fwdCfg.clearColor;
+    m_pipelineDescs = fwdCfg.pipelines;
+    m_pipelines.resize(m_pipelineDescs.size());
+    m_opaquePipelineIdx.reset();
 
-    // Opaque: defaults (depth write on, no blend)
-    m_opaquePipeline.Create(dev, info.forwardRenderPass,
-                            std::span{layouts}, info.extent, vert, frag);
+    auto   layouts = MakeLayouts(info.uboLayout, info.bindlessLayout);
+    const VkDevice dev = info.dev->Device();
 
-    // AlphaBlend: SrcAlpha / OneMinusSrcAlpha
-    m_alphaBlendPipeline.Create(dev, info.forwardRenderPass,
-                                std::span{layouts}, info.extent, vert, frag,
-                                MakeBlendConfig(VK_BLEND_FACTOR_SRC_ALPHA,
-                                                VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA));
-
-    // Additive: One / One
-    m_additivePipeline.Create(dev, info.forwardRenderPass,
-                              std::span{layouts}, info.extent, vert, frag,
-                              MakeBlendConfig(VK_BLEND_FACTOR_ONE,
-                                             VK_BLEND_FACTOR_ONE));
-
-    // Premultiplied: One / OneMinusSrcAlpha
-    m_premultPipeline.Create(dev, info.forwardRenderPass,
-                             std::span{layouts}, info.extent, vert, frag,
-                             MakeBlendConfig(VK_BLEND_FACTOR_ONE,
-                                            VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA));
+    for (size_t i = 0; i < m_pipelineDescs.size(); ++i)
+    {
+        const auto& desc = m_pipelineDescs[i];
+        const std::string vert = info.shaderDir + desc.vertShader;
+        const std::string frag = info.shaderDir + desc.fragShader;
+        m_pipelines[i].Create(dev, info.forwardRenderPass,
+                              std::span{layouts}, info.extent,
+                              vert, frag, MakePipelineConfig(desc));
+        if (!m_opaquePipelineIdx.has_value() &&
+            desc.blendMode   == BlendMode::Opaque &&
+            desc.renderLayer == RenderLayer::Opaque)
+        {
+            m_opaquePipelineIdx = i;
+        }
+    }
 }
 
 void ForwardRenderPass::Rebuild(DeviceContext& dev, VkExtent2D newExtent)
 {
-    m_opaquePipeline.Destroy(dev.Device());
-    m_alphaBlendPipeline.Destroy(dev.Device());
-    m_additivePipeline.Destroy(dev.Device());
-    m_premultPipeline.Destroy(dev.Device());
+    for (auto& p : m_pipelines)
+        p.Destroy(dev.Device());
 
-    auto layouts = MakeLayouts(m_descriptorLayout, m_bindlessLayout);
+    auto   layouts = MakeLayouts(m_descriptorLayout, m_bindlessLayout);
+    const VkDevice d = dev.Device();
 
-    const std::string vert = m_shaderDir + "mesh.vert.spv";
-    const std::string frag = m_shaderDir + "mesh.frag.spv";
-    const VkDevice    d    = dev.Device();
-
-    m_opaquePipeline.Create(d, m_renderPass.GetHandle(),
-                            std::span{layouts}, newExtent, vert, frag);
-
-    m_alphaBlendPipeline.Create(d, m_renderPass.GetHandle(),
-                                std::span{layouts}, newExtent, vert, frag,
-                                MakeBlendConfig(VK_BLEND_FACTOR_SRC_ALPHA,
-                                                VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA));
-
-    m_additivePipeline.Create(d, m_renderPass.GetHandle(),
-                              std::span{layouts}, newExtent, vert, frag,
-                              MakeBlendConfig(VK_BLEND_FACTOR_ONE,
-                                             VK_BLEND_FACTOR_ONE));
-
-    m_premultPipeline.Create(d, m_renderPass.GetHandle(),
-                             std::span{layouts}, newExtent, vert, frag,
-                             MakeBlendConfig(VK_BLEND_FACTOR_ONE,
-                                            VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA));
+    for (size_t i = 0; i < m_pipelineDescs.size(); ++i)
+    {
+        const auto& desc = m_pipelineDescs[i];
+        const std::string vert = m_shaderDir + desc.vertShader;
+        const std::string frag = m_shaderDir + desc.fragShader;
+        m_pipelines[i].Create(d, m_renderPass.GetHandle(),
+                              std::span{layouts}, newExtent,
+                              vert, frag, MakePipelineConfig(desc));
+    }
 }
 
 void ForwardRenderPass::EmitDraw(VkCommandBuffer cmd,
@@ -150,7 +140,8 @@ void ForwardRenderPass::RecordLayer(VkCommandBuffer   cmd,
 void ForwardRenderPass::Record(VkCommandBuffer cmd, PassContext& ctx)
 {
     std::array<VkClearValue, 2> clearValues{};
-    clearValues[0].color        = {{0.15f, 0.15f, 0.15f, 1.0f}};
+    clearValues[0].color        = {{m_clearColor[0], m_clearColor[1],
+                                    m_clearColor[2], m_clearColor[3]}};
     clearValues[1].depthStencil = {1.0f, 0};
 
     VkRenderPassBeginInfo rpInfo{};
@@ -178,70 +169,82 @@ void ForwardRenderPass::Record(VkCommandBuffer cmd, PassContext& ctx)
     sc.extent = ctx.extent;
     vkCmdSetScissor(cmd, 0, 1, &sc);
 
-    // Bind descriptor sets once; layout is shared by all four pipelines.
+    if (m_pipelines.empty())
+    {
+        vkCmdEndRenderPass(cmd);
+        return;
+    }
+
+    // Bind descriptor sets once; all pipelines share the same layout.
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            m_opaquePipeline.PipelineLayout(),
+                            m_pipelines[0].PipelineLayout(),
                             0, 1, &ctx.uboDescriptorSet, 0, nullptr);
     if (ctx.bindlessDescriptorSet != VK_NULL_HANDLE)
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                m_opaquePipeline.PipelineLayout(),
+                                m_pipelines[0].PipelineLayout(),
                                 1, 1, &ctx.bindlessDescriptorSet, 0, nullptr);
 
     // ── Opaque layer ─────────────────────────────────────────────────────────
     // GPU-indirect path (FrustumCullPass) only applies to opaque draws because
     // the compute cull pass has no per-draw blend-mode concept.
-    if (ctx.indirectDrawCount > 0 && ctx.drawCountBuffer != VK_NULL_HANDLE)
+    if (m_opaquePipelineIdx.has_value())
     {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          m_opaquePipeline.GetHandle());
-        for (uint32_t i = 0; i < ctx.indirectDrawCount; ++i)
+        Pipeline& opaquePipeline = m_pipelines[*m_opaquePipelineIdx];
+        if (ctx.indirectDrawCount > 0 && ctx.drawCountBuffer != VK_NULL_HANDLE)
         {
-            const auto& dc = ctx.directDrawCalls[i];
-            if (dc.renderLayer != RenderLayer::Opaque) continue;
-            vkCmdPushConstants(cmd, m_opaquePipeline.PipelineLayout(),
-                               VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-                               sizeof(MaterialData), &dc.material);
-            VkBuffer     bufs[2] = {dc.vertexBuffer->Buffer(), dc.instanceBuffer->Buffer()};
-            VkDeviceSize offs[2] = {0, 0};
-            vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
-            vkCmdBindIndexBuffer(cmd, dc.indexBuffer->Buffer(), 0, VK_INDEX_TYPE_UINT32);
-            vkCmdDrawIndexedIndirectCount(
-                cmd,
-                ctx.indirectDrawBuffer,
-                static_cast<VkDeviceSize>(i) * sizeof(VkDrawIndexedIndirectCommand),
-                ctx.drawCountBuffer,
-                static_cast<VkDeviceSize>(i) * sizeof(uint32_t),
-                1,
-                sizeof(VkDrawIndexedIndirectCommand));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              opaquePipeline.GetHandle());
+            for (uint32_t i = 0; i < ctx.indirectDrawCount; ++i)
+            {
+                const auto& dc = ctx.directDrawCalls[i];
+                if (dc.renderLayer != RenderLayer::Opaque) continue;
+                vkCmdPushConstants(cmd, opaquePipeline.PipelineLayout(),
+                                   VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                   sizeof(MaterialData), &dc.material);
+                VkBuffer     bufs[2] = {dc.vertexBuffer->Buffer(), dc.instanceBuffer->Buffer()};
+                VkDeviceSize offs[2] = {0, 0};
+                vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
+                vkCmdBindIndexBuffer(cmd, dc.indexBuffer->Buffer(), 0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexedIndirectCount(
+                    cmd,
+                    ctx.indirectDrawBuffer,
+                    static_cast<VkDeviceSize>(i) * sizeof(VkDrawIndexedIndirectCommand),
+                    ctx.drawCountBuffer,
+                    static_cast<VkDeviceSize>(i) * sizeof(uint32_t),
+                    1,
+                    sizeof(VkDrawIndexedIndirectCommand));
+            }
         }
-    }
-    else
-    {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          m_opaquePipeline.GetHandle());
-        for (const auto& dc : ctx.directDrawCalls)
+        else
         {
-            if (dc.renderLayer != RenderLayer::Opaque) continue;
-            EmitDraw(cmd, dc, m_opaquePipeline.PipelineLayout());
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              opaquePipeline.GetHandle());
+            for (const auto& dc : ctx.directDrawCalls)
+            {
+                if (dc.renderLayer != RenderLayer::Opaque) continue;
+                EmitDraw(cmd, dc, opaquePipeline.PipelineLayout());
+            }
         }
     }
 
-    // ── Transparent layer (direct path only, sorted back-to-front by caller) ─
-    RecordLayer(cmd, ctx, RenderLayer::Transparent, BlendMode::AlphaBlend,    m_alphaBlendPipeline);
-    RecordLayer(cmd, ctx, RenderLayer::Transparent, BlendMode::Additive,      m_additivePipeline);
-    RecordLayer(cmd, ctx, RenderLayer::Transparent, BlendMode::Premultiplied, m_premultPipeline);
-
-    // ── Overlay layer (reserved) ──────────────────────────────────────────────
+    // ── Non-opaque layers (direct path only, sorted back-to-front by caller) ─
+    for (size_t i = 0; i < m_pipelineDescs.size(); ++i)
+    {
+        const auto& desc = m_pipelineDescs[i];
+        if (desc.renderLayer == RenderLayer::Opaque) continue;
+        RecordLayer(cmd, ctx, desc.renderLayer, desc.blendMode, m_pipelines[i]);
+    }
 
     vkCmdEndRenderPass(cmd);
 }
 
 void ForwardRenderPass::Destroy(VkDevice device)
 {
-    m_opaquePipeline.Destroy(device);
-    m_alphaBlendPipeline.Destroy(device);
-    m_additivePipeline.Destroy(device);
-    m_premultPipeline.Destroy(device);
+    for (auto& p : m_pipelines)
+        p.Destroy(device);
+    m_pipelines.clear();
+    m_pipelineDescs.clear();
+    m_opaquePipelineIdx.reset();
     m_renderPass.Destroy(device);
 }
 

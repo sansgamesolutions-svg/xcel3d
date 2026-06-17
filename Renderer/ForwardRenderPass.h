@@ -3,8 +3,12 @@
 #include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/DrawCall.h"
-#include "Renderer/RenderOptions.h"
+#include "Renderer/RenderGraphConfig.h"
+#include <array>
+#include <cstddef>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace xcel {
 
@@ -30,11 +34,15 @@ private:
     void RecordLayer(VkCommandBuffer cmd, const PassContext& ctx,
                      RenderLayer layer, BlendMode mode, Pipeline& pipeline);
 
-    RenderPass            m_renderPass;
-    Pipeline              m_opaquePipeline;
-    Pipeline              m_alphaBlendPipeline;
-    Pipeline              m_additivePipeline;
-    Pipeline              m_premultPipeline;
+    RenderPass m_renderPass;
+
+    // Parallel arrays: one entry per pipeline descriptor from the config.
+    std::vector<Pipeline>           m_pipelines;
+    std::vector<PipelineDescriptor> m_pipelineDescs;
+
+    std::array<float, 4>  m_clearColor        = {0.15f, 0.15f, 0.15f, 1.0f};
+    std::optional<size_t> m_opaquePipelineIdx; // index of the Opaque/Opaque pipeline
+
     VkDescriptorSetLayout m_descriptorLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_bindlessLayout   = VK_NULL_HANDLE;
     std::string           m_shaderDir;

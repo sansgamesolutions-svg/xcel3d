@@ -1,4 +1,5 @@
 #include "Renderer/OitPass.h"
+#include "Renderer/GpuBuffer.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/DeviceContext.h"
 #include <stdexcept>

@@ -2,6 +2,7 @@
 #include <vulkan/vulkan.h>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace xcel {
@@ -45,6 +46,12 @@ public:
 
     Pipeline(const Pipeline&)            = delete;
     Pipeline& operator=(const Pipeline&) = delete;
+
+    Pipeline(Pipeline&& other) noexcept
+        : m_pipelineLayout(std::exchange(other.m_pipelineLayout, VK_NULL_HANDLE))
+        , m_pipeline(std::exchange(other.m_pipeline, VK_NULL_HANDLE))
+    {}
+    Pipeline& operator=(Pipeline&&) = delete;
 
     // Primary overload: accepts any number of descriptor set layouts (set=0, set=1, …).
     void Create(
