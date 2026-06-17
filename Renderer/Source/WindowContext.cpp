@@ -15,6 +15,7 @@
 #include "Common/ISystem.h"
 #include "Common/ThreadPool.h"
 #include <glm/gtc/type_ptr.hpp>
+#include <algorithm>
 #include <stdexcept>
 #include <cstring>
 #include <limits>
@@ -140,8 +141,17 @@ ManipulatorController& WindowContext::GetManipulators() { return m_manipulators;
 
 void WindowContext::SetPassOptions(const PassOptions& opts)
 {
-    m_passOptions = opts;
-    m_graphDirty  = true;
+    m_globalOptions.frustumCulling   = opts.frustumCulling;
+    m_globalOptions.occlusionCulling = opts.occlusionCulling;
+    m_graphDirty = true;
+}
+
+void WindowContext::SetGlobalRenderOptions(const GlobalRenderOptions& opts)
+{
+    m_globalOptions = opts;
+    m_effectiveCaps = ComputeEffectiveCaps(m_hwCaps, m_globalOptions);
+    m_world.SetBatchingStrategy(opts.batchingStrategy);
+    m_graphDirty = true;
 }
 
 void WindowContext::SetShaderDir(std::filesystem::path dir)
@@ -204,11 +214,15 @@ void WindowContext::InitVulkan()
     m_vulkan.Init(*m_widget, /*enableValidation=*/true);
 
     DeviceContext& dev = m_vulkan.PrimaryDevice();
+    m_hwCaps        = QueryHardwareCaps(dev.PhysicalDevice());
+    m_effectiveCaps = ComputeEffectiveCaps(m_hwCaps, m_globalOptions);
+
     m_descriptors.Create(dev);
     m_textures.Create(dev);
 
     m_renderGraph = RenderGraphBuilder{}
-        .SetOptions(m_passOptions)
+        .SetOptions(m_globalOptions)
+        .SetEffectiveCaps(m_effectiveCaps)
         .SetSwapchain(m_swapchain)
         .SetSurface(m_vulkan.Surface())
         .SetWindow(*m_widget)
@@ -339,7 +353,8 @@ void WindowContext::DrawFrame()
         vkDeviceWaitIdle(dev.Device());
         m_renderGraph.Destroy(dev.Device());
         m_renderGraph = RenderGraphBuilder{}
-            .SetOptions(m_passOptions)
+            .SetOptions(m_globalOptions)
+            .SetEffectiveCaps(m_effectiveCaps)
             .SetSwapchain(m_swapchain)
             .SetSurface(m_vulkan.Surface())
             .SetWindow(*m_widget)
@@ -371,8 +386,32 @@ void WindowContext::DrawFrame()
         if (const auto* mat = e.get<MaterialComponent>())
             dc.material = {mat->ambientFactor, mat->diffuseFactor,
                            mat->specularFactor, mat->shininess, mat->textureIndex};
+        if (const auto* ro = e.get<MeshRenderOptions>())
+        {
+            dc.blendMode   = ro->blendMode;
+            dc.renderLayer = ro->renderLayer;
+        }
         m_drawCalls.push_back(dc);
     });
+
+    // Sort: opaque first, transparent second (back-to-front), overlay last.
+    const glm::vec3 camPos = m_camera.Position();
+    std::stable_sort(m_drawCalls.begin(), m_drawCalls.end(),
+        [&camPos](const DrawCall& a, const DrawCall& b)
+        {
+            if (a.renderLayer != b.renderLayer)
+                return static_cast<uint8_t>(a.renderLayer) <
+                       static_cast<uint8_t>(b.renderLayer);
+            if (a.renderLayer == RenderLayer::Transparent)
+            {
+                const glm::vec3 ca = (a.aabbMin + a.aabbMax) * 0.5f;
+                const glm::vec3 cb = (b.aabbMin + b.aabbMax) * 0.5f;
+                return glm::dot(ca - camPos, ca - camPos) >
+                       glm::dot(cb - camPos, cb - camPos);
+            }
+            return false;
+        });
+
     const uint32_t  currentFrame = m_renderGraph.CurrentFrame();
 
     // Update manipulators (gizmo positions, view cube orientation).

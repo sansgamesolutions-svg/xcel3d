@@ -89,6 +89,11 @@ flecs::world& World::Ecs()
     return m_ecs;
 }
 
+void World::SetBatchingStrategy(BatchingStrategy strategy)
+{
+    m_batchingSystem.SetStrategy(strategy);
+}
+
 void World::BuildAll(DeviceContext& dev, ThreadPool* pool)
 {
     m_batchingSystem.BuildAll(m_ecs, dev, pool);

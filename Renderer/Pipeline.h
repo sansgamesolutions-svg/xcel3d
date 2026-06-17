@@ -15,6 +15,13 @@ struct PipelineConfig
     VkCullModeFlags cullMode         = VK_CULL_MODE_BACK_BIT;
     // Push-constant size in bytes (fragment stage). 0 = no push constant.
     uint32_t        pushConstantSize = 0;
+
+    // Blend factors used when alphaBlend == true.
+    // Defaults reproduce the classic SrcAlpha / OneMinusSrcAlpha behaviour.
+    VkBlendFactor   srcColorFactor   = VK_BLEND_FACTOR_SRC_ALPHA;
+    VkBlendFactor   dstColorFactor   = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    VkBlendFactor   srcAlphaFactor   = VK_BLEND_FACTOR_ONE;
+    VkBlendFactor   dstAlphaFactor   = VK_BLEND_FACTOR_ZERO;
 };
 
 class Pipeline

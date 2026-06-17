@@ -1,6 +1,7 @@
 #pragma once
 #include "Common/Entity.h"
 #include "Renderer/BatchingSystem.h"
+#include "Renderer/RenderOptions.h"
 #include <glm/glm.hpp>
 #include <flecs.h>
 #include <memory>
@@ -48,6 +49,9 @@ public:
                     float              intensity = 1.0f);
 
     flecs::world& Ecs();
+
+    // Must be called before BuildAll(); no-op if no pages have been created yet.
+    void SetBatchingStrategy(BatchingStrategy strategy);
 
     void BuildAll(DeviceContext& dev, ThreadPool* pool);
     void FlushRebuild(ThreadPool* pool);

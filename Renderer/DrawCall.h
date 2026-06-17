@@ -1,4 +1,5 @@
 #pragma once
+#include "Renderer/RenderOptions.h"
 #include <glm/glm.hpp>
 #include <cstdint>
 
@@ -28,6 +29,8 @@ struct DrawCall
     glm::vec3        aabbMin        = glm::vec3(0.f);
     glm::vec3        aabbMax        = glm::vec3(0.f);
     MaterialData     material{};
+    BlendMode        blendMode   = BlendMode::Opaque;
+    RenderLayer      renderLayer = RenderLayer::Opaque;
 };
 
 } // namespace xcel

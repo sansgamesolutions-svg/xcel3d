@@ -6,7 +6,15 @@
 
 namespace xcel {
 
-RenderGraphBuilder& RenderGraphBuilder::SetOptions(const PassOptions& opts)     { m_options     = opts;        return *this; }
+RenderGraphBuilder& RenderGraphBuilder::SetOptions(const PassOptions& opts)
+{
+    m_options.frustumCulling   = opts.frustumCulling;
+    m_options.occlusionCulling = opts.occlusionCulling;
+    return *this;
+}
+
+RenderGraphBuilder& RenderGraphBuilder::SetOptions(const GlobalRenderOptions& opts) { m_options      = opts;        return *this; }
+RenderGraphBuilder& RenderGraphBuilder::SetEffectiveCaps(const EffectiveCaps& caps) { m_effectiveCaps = caps;       return *this; }
 RenderGraphBuilder& RenderGraphBuilder::SetSwapchain(Swapchain& sc)             { m_swapchain   = &sc;         return *this; }
 RenderGraphBuilder& RenderGraphBuilder::SetSurface(VkSurfaceKHR s)              { m_surface     = s;           return *this; }
 RenderGraphBuilder& RenderGraphBuilder::SetWindow(IWindowWidget& w)             { m_window      = &w;          return *this; }
@@ -55,6 +63,7 @@ RenderGraph RenderGraphBuilder::Build(DeviceContext& dev)
     info.shaderDir         = m_shaderDir;
     info.colorFormat       = colorFmt;
     info.depthFormat       = VK_FORMAT_D32_SFLOAT;
+    info.effectiveCaps     = m_effectiveCaps;
 
     std::vector<std::unique_ptr<IPass>> passes;
 

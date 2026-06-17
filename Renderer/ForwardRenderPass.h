@@ -2,6 +2,8 @@
 #include "Renderer/IPass.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
+#include "Renderer/DrawCall.h"
+#include "Renderer/RenderOptions.h"
 #include <string>
 
 namespace xcel {
@@ -24,8 +26,15 @@ public:
     void Destroy(VkDevice)                     override;
 
 private:
+    void EmitDraw(VkCommandBuffer cmd, const DrawCall& dc, VkPipelineLayout layout) const;
+    void RecordLayer(VkCommandBuffer cmd, const PassContext& ctx,
+                     RenderLayer layer, BlendMode mode, Pipeline& pipeline);
+
     RenderPass            m_renderPass;
-    Pipeline              m_pipeline;
+    Pipeline              m_opaquePipeline;
+    Pipeline              m_alphaBlendPipeline;
+    Pipeline              m_additivePipeline;
+    Pipeline              m_premultPipeline;
     VkDescriptorSetLayout m_descriptorLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_bindlessLayout   = VK_NULL_HANDLE;
     std::string           m_shaderDir;
