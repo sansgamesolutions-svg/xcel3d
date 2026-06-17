@@ -1,6 +1,7 @@
 #include "Renderer/RenderGraphBuilder.h"
 #include "Renderer/ForwardRenderPass.h"
 #include "Renderer/FrustumCullPass.h"
+#include "Renderer/OitPass.h"
 #include "Renderer/Manipulator/ManipulatorPass.h"
 #include <stdexcept>
 
@@ -64,6 +65,7 @@ RenderGraph RenderGraphBuilder::Build(DeviceContext& dev)
     info.colorFormat       = colorFmt;
     info.depthFormat       = VK_FORMAT_D32_SFLOAT;
     info.effectiveCaps     = m_effectiveCaps;
+    info.swapchain         = m_swapchain;
 
     std::vector<std::unique_ptr<IPass>> passes;
 
@@ -73,6 +75,7 @@ RenderGraph RenderGraphBuilder::Build(DeviceContext& dev)
     (void)m_options.occlusionCulling;
 
     passes.push_back(std::move(forwardPass));
+    passes.push_back(std::make_unique<OitPass>());
     passes.push_back(std::move(manipPass));
 
     RenderGraph graph;

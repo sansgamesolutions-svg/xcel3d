@@ -1,4 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene_ubo.glsl"
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
@@ -15,21 +18,6 @@ layout(location = 0) out vec3 fragPos;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec3 fragColor;
 layout(location = 3) out vec2 fragTexCoord;
-
-struct LightGpu {
-    vec4 positionAndIntensity; // xyz = world position, w = intensity
-    vec4 colorAndPad;          // xyz = linear RGB color, w = 0
-};
-
-layout(set = 0, binding = 0) uniform FrameUBO {
-    mat4     model;
-    mat4     view;
-    mat4     proj;
-    vec3     viewPos;
-    uint     lightCount;
-    LightGpu lights[8];
-    vec4     sectionPlane;
-} ubo;
 
 void main() {
     vec4 worldPos  = instModel * vec4(inPosition, 1.0);

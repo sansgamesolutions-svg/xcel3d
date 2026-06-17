@@ -81,6 +81,7 @@ void RenderGraph::Execute(DeviceContext& dev, PassContext ctx, bool& outNeedsRes
     vkResetFences(device, 1, &m_inFlightFence[frame]);
 
     ctx.frameIndex           = frame;
+    ctx.imageIndex           = imageIndex;
     ctx.swapchainFramebuffer = m_swapchain->Framebuffer(imageIndex);
     ctx.overlayFramebuffer   = m_overlayRenderPass != VK_NULL_HANDLE
                                    ? m_swapchain->OverlayFramebuffer(imageIndex)

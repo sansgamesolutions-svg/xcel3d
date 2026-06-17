@@ -10,10 +10,11 @@ namespace xcel {
 
 enum class BlendMode : uint8_t
 {
-    Opaque,        // no blending; depth write on
-    AlphaBlend,    // SrcAlpha / OneMinusSrcAlpha; depth write off
-    Additive,      // One / One; depth write off
-    Premultiplied, // One / OneMinusSrcAlpha; depth write off
+    Opaque,             // no blending; depth write on
+    AlphaBlend,         // SrcAlpha / OneMinusSrcAlpha; depth write off
+    Additive,           // One / One; depth write off
+    Premultiplied,      // One / OneMinusSrcAlpha; depth write off
+    WeightedBlendedOIT, // order-independent transparency; drawn by OitPass, not ForwardRenderPass
 };
 
 enum class RenderLayer : uint8_t

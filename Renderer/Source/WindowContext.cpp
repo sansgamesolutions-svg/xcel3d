@@ -385,7 +385,7 @@ void WindowContext::DrawFrame()
         else if (bb) { dc.aabbMin = bb->min;     dc.aabbMax = bb->max;     }
         if (const auto* mat = e.get<MaterialComponent>())
             dc.material = {mat->ambientFactor, mat->diffuseFactor,
-                           mat->specularFactor, mat->shininess, mat->textureIndex};
+                           mat->specularFactor, mat->shininess, mat->alpha, mat->textureIndex};
         if (const auto* ro = e.get<MeshRenderOptions>())
         {
             dc.blendMode   = ro->blendMode;

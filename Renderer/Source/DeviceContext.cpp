@@ -105,6 +105,9 @@ void DeviceContext::Create(VkPhysicalDevice physDev, VkSurfaceKHR surface, bool 
     indexingFeatures.runtimeDescriptorArray                          = VK_TRUE;
 
     VkPhysicalDeviceFeatures features{};
+    // Required so the OIT accumulate subpass can use different per-attachment blend
+    // equations for its accum (ONE/ONE) and reveal (ZERO/ONE_MINUS_SRC_COLOR) targets.
+    features.independentBlend = VK_TRUE;
     VkDeviceCreateInfo createInfo{};
     createInfo.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.pNext                   = &indexingFeatures;

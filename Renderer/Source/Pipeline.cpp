@@ -89,11 +89,13 @@ void Pipeline::Create(
     const uint32_t attrCount = config.includeTexCoord ? 8u : 7u;
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
-    vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInput.vertexBindingDescriptionCount   = (uint32_t)bindings.size();
-    vertexInput.pVertexBindingDescriptions      = bindings.data();
-    vertexInput.vertexAttributeDescriptionCount = attrCount;
-    vertexInput.pVertexAttributeDescriptions    = attrs.data();
+    vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    if (!config.noVertexInput) {
+        vertexInput.vertexBindingDescriptionCount   = (uint32_t)bindings.size();
+        vertexInput.pVertexBindingDescriptions      = bindings.data();
+        vertexInput.vertexAttributeDescriptionCount = attrCount;
+        vertexInput.pVertexAttributeDescriptions    = attrs.data();
+    }
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -143,8 +145,13 @@ void Pipeline::Create(
     VkPipelineColorBlendStateCreateInfo colorBlend{};
     colorBlend.sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlend.logicOpEnable     = VK_FALSE;
-    colorBlend.attachmentCount   = 1;
-    colorBlend.pAttachments      = &blendAttachment;
+    if (!config.mrtBlendAttachments.empty()) {
+        colorBlend.attachmentCount = static_cast<uint32_t>(config.mrtBlendAttachments.size());
+        colorBlend.pAttachments    = config.mrtBlendAttachments.data();
+    } else {
+        colorBlend.attachmentCount = 1;
+        colorBlend.pAttachments    = &blendAttachment;
+    }
 
     VkPushConstantRange pcRange{};
     pcRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -184,7 +191,7 @@ void Pipeline::Create(
     pipelineInfo.pDynamicState       = &dynamicState;
     pipelineInfo.layout              = m_pipelineLayout;
     pipelineInfo.renderPass          = renderPass;
-    pipelineInfo.subpass             = 0;
+    pipelineInfo.subpass             = config.subpass;
 
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_pipeline) != VK_SUCCESS)
         throw std::runtime_error("Pipeline: vkCreateGraphicsPipelines failed");

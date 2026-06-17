@@ -5,12 +5,24 @@ set(SHADER_FRAG_SPV "${SHADER_OUTPUT_DIR}/mesh.frag.spv")
 set(SHADER_FRUSTUM_CULL_SPV "${SHADER_OUTPUT_DIR}/frustum_cull.comp.spv")
 set(SHADER_MANIP_VERT_SPV "${SHADER_OUTPUT_DIR}/manipulator.vert.spv")
 set(SHADER_MANIP_FRAG_SPV "${SHADER_OUTPUT_DIR}/manipulator.frag.spv")
+set(SHADER_OIT_ACCUMULATE_FRAG_SPV "${SHADER_OUTPUT_DIR}/oit_accumulate.frag.spv")
+set(SHADER_OIT_COMPOSITE_VERT_SPV "${SHADER_OUTPUT_DIR}/oit_composite.vert.spv")
+set(SHADER_OIT_COMPOSITE_FRAG_SPV "${SHADER_OUTPUT_DIR}/oit_composite.frag.spv")
+
+# Shared GLSL headers pulled in via #include; listed as DEPENDS on every shader
+# that includes them so header edits trigger recompilation.
+set(SHADER_COMMON_HEADERS
+    "${SHADER_SOURCE_DIR}/lighting.glsl"
+    "${SHADER_SOURCE_DIR}/scene_ubo.glsl"
+    "${SHADER_SOURCE_DIR}/bindless_textures.glsl"
+    "${SHADER_SOURCE_DIR}/material.glsl"
+)
 
 add_custom_command(
     OUTPUT "${SHADER_VERT_SPV}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_OUTPUT_DIR}"
     COMMAND "${GLSLC_EXECUTABLE}" --target-env=vulkan1.2 "${SHADER_SOURCE_DIR}/mesh.vert" -o "${SHADER_VERT_SPV}"
-    DEPENDS "${SHADER_SOURCE_DIR}/mesh.vert"
+    DEPENDS "${SHADER_SOURCE_DIR}/mesh.vert" ${SHADER_COMMON_HEADERS}
     VERBATIM
 )
 
@@ -18,7 +30,31 @@ add_custom_command(
     OUTPUT "${SHADER_FRAG_SPV}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_OUTPUT_DIR}"
     COMMAND "${GLSLC_EXECUTABLE}" --target-env=vulkan1.2 "${SHADER_SOURCE_DIR}/mesh.frag" -o "${SHADER_FRAG_SPV}"
-    DEPENDS "${SHADER_SOURCE_DIR}/mesh.frag"
+    DEPENDS "${SHADER_SOURCE_DIR}/mesh.frag" ${SHADER_COMMON_HEADERS}
+    VERBATIM
+)
+
+add_custom_command(
+    OUTPUT "${SHADER_OIT_ACCUMULATE_FRAG_SPV}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_OUTPUT_DIR}"
+    COMMAND "${GLSLC_EXECUTABLE}" --target-env=vulkan1.2 "${SHADER_SOURCE_DIR}/oit_accumulate.frag" -o "${SHADER_OIT_ACCUMULATE_FRAG_SPV}"
+    DEPENDS "${SHADER_SOURCE_DIR}/oit_accumulate.frag" ${SHADER_COMMON_HEADERS}
+    VERBATIM
+)
+
+add_custom_command(
+    OUTPUT "${SHADER_OIT_COMPOSITE_VERT_SPV}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_OUTPUT_DIR}"
+    COMMAND "${GLSLC_EXECUTABLE}" "${SHADER_SOURCE_DIR}/oit_composite.vert" -o "${SHADER_OIT_COMPOSITE_VERT_SPV}"
+    DEPENDS "${SHADER_SOURCE_DIR}/oit_composite.vert"
+    VERBATIM
+)
+
+add_custom_command(
+    OUTPUT "${SHADER_OIT_COMPOSITE_FRAG_SPV}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_OUTPUT_DIR}"
+    COMMAND "${GLSLC_EXECUTABLE}" "${SHADER_SOURCE_DIR}/oit_composite.frag" -o "${SHADER_OIT_COMPOSITE_FRAG_SPV}"
+    DEPENDS "${SHADER_SOURCE_DIR}/oit_composite.frag"
     VERBATIM
 )
 
@@ -61,6 +97,7 @@ add_library(XcelRenderer STATIC
     Source/InstanceDrawable.cpp
     Source/Camera.cpp
     Source/ForwardRenderPass.cpp
+    Source/OitPass.cpp
     Source/RenderGraph.cpp
     Source/RenderGraphBuilder.cpp
     Source/FrustumCullPass.cpp
@@ -81,6 +118,9 @@ add_library(XcelRenderer STATIC
     "${SHADER_FRUSTUM_CULL_SPV}"
     "${SHADER_MANIP_VERT_SPV}"
     "${SHADER_MANIP_FRAG_SPV}"
+    "${SHADER_OIT_ACCUMULATE_FRAG_SPV}"
+    "${SHADER_OIT_COMPOSITE_VERT_SPV}"
+    "${SHADER_OIT_COMPOSITE_FRAG_SPV}"
 )
 
 target_include_directories(XcelRenderer
