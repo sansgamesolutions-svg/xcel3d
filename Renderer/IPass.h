@@ -1,6 +1,7 @@
 #pragma once
 #include "Renderer/DeviceContext.h"
 #include "Renderer/DrawCall.h"
+#include "Renderer/RenderOptions.h"
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <span>
@@ -47,6 +48,8 @@ struct BuildPassInfo
     std::string           shaderDir;
     VkFormat              colorFormat       = VK_FORMAT_B8G8R8A8_SRGB;
     VkFormat              depthFormat       = VK_FORMAT_D32_SFLOAT;
+    // Reserved for future MSAA wiring; passes read this when upgrading sample counts.
+    EffectiveCaps         effectiveCaps     = {};
 };
 
 class IPass

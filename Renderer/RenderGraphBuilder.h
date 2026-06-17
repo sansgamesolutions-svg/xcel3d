@@ -1,6 +1,8 @@
 #pragma once
 #include "Renderer/RenderGraph.h"
 #include "Renderer/PassOptions.h"
+#include "Renderer/RenderOptions.h"
+#include "Renderer/HardwareCaps.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/DescriptorManager.h"
 #include "Renderer/TextureManager.h"
@@ -17,7 +19,9 @@ class RenderGraphBuilder
 public:
     RenderGraphBuilder() = default;
 
-    RenderGraphBuilder& SetOptions(const PassOptions& opts);
+    RenderGraphBuilder& SetOptions(const PassOptions& opts);      // backward-compat bridge
+    RenderGraphBuilder& SetOptions(const GlobalRenderOptions& opts);
+    RenderGraphBuilder& SetEffectiveCaps(const EffectiveCaps& caps);
     RenderGraphBuilder& SetSwapchain(Swapchain& swapchain);
     RenderGraphBuilder& SetSurface(VkSurfaceKHR surface);
     RenderGraphBuilder& SetWindow(IWindowWidget& window);
@@ -29,8 +33,9 @@ public:
     RenderGraph Build(DeviceContext& dev);
 
 private:
-    PassOptions        m_options;
-    Swapchain*         m_swapchain   = nullptr;
+    GlobalRenderOptions m_options;
+    EffectiveCaps       m_effectiveCaps;
+    Swapchain*          m_swapchain   = nullptr;
     VkSurfaceKHR       m_surface     = VK_NULL_HANDLE;
     IWindowWidget*     m_window      = nullptr;
     DescriptorManager* m_descriptors = nullptr;

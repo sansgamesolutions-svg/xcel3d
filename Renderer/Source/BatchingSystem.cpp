@@ -2,6 +2,7 @@
 #include "Renderer/BatchDrawable.h"
 #include "Renderer/Component.h"
 #include "Common/Logger.h"
+#include <cassert>
 #include <unordered_set>
 #include <unordered_map>
 #include <string>
@@ -9,9 +10,16 @@
 
 namespace xcel {
 
-BatchingSystem::BatchingSystem(uint64_t pageCapacityBytes)
-    {
+BatchingSystem::BatchingSystem(uint64_t pageCapacityBytes, BatchingStrategy strategy)
+{
     m_pageCapacity = pageCapacityBytes;
+    m_strategy     = strategy;
+}
+
+void BatchingSystem::SetStrategy(BatchingStrategy strategy)
+{
+    assert(m_pageCount == 0 && "BatchingSystem::SetStrategy must be called before BuildAll");
+    m_strategy = strategy;
 }
 
 void BatchingSystem::Register(flecs::entity meshEntity)
@@ -62,23 +70,35 @@ const char* BatchingSystem::PrimitiveTypeName(PrimitiveType type)
 flecs::entity BatchingSystem::FindOrCreatePage(
     flecs::world& world,
     PrimitiveType type,
+    BlendMode     blendMode,
     uint64_t      neededBytes)
 {
-    flecs::entity found;
+    // When strategy is ByPrimitiveType, blendMode is not part of the page key.
+    const bool matchBlend = (m_strategy == BatchingStrategy::ByPrimitiveTypeAndBlend);
 
+    flecs::entity found;
     world.each([&](flecs::entity e, PageMetaComponent& meta) {
-        if (!found.is_valid() &&
-            meta.primitiveType == type &&
-            (meta.usedBytes + neededBytes) <= meta.capacityBytes)
-        {
+        if (found.is_valid()) return;
+        if (meta.primitiveType != type) return;
+        if (matchBlend && meta.blendMode != blendMode) return;
+        if ((meta.usedBytes + neededBytes) <= meta.capacityBytes)
             found = e;
-        }
     });
 
     if (found.is_valid()) return found;
 
-    std::string name = std::string("page_") + PrimitiveTypeName(type)
-                     + "_" + std::to_string(m_pageCount++);
+    std::string name = std::string("page_") + PrimitiveTypeName(type);
+    if (matchBlend)
+    {
+        switch (blendMode)
+        {
+        case BlendMode::AlphaBlend:    name += "_alpha";    break;
+        case BlendMode::Additive:      name += "_additive"; break;
+        case BlendMode::Premultiplied: name += "_premult";  break;
+        default:                                            break;
+        }
+    }
+    name += "_" + std::to_string(m_pageCount++);
 
     XCEL_LOG_DEBUG(Batching, "Creating page '{}' ({} byte budget)", name, m_pageCapacity);
 
@@ -88,7 +108,7 @@ flecs::entity BatchingSystem::FindOrCreatePage(
         .set<NameComponent>({name})
         .set<MeshComponent>({std::move(bd)})
         .set<VisibilityComponent>({true})
-        .set<PageMetaComponent>({type, m_pageCapacity, 0});
+        .set<PageMetaComponent>({type, blendMode, m_pageCapacity, 0});
 
     return page;
 }
@@ -103,10 +123,16 @@ void BatchingSystem::BuildAll(
     m_world = &world;
     m_dev   = &dev;
 
-    // Assign each registered mesh entity to page(s) by PrimitiveType.
+    // Assign each registered mesh entity to page(s) by PrimitiveType (and BlendMode
+    // when strategy == ByPrimitiveTypeAndBlend).
     for (flecs::entity e : m_pending) {
         const PrimitiveSetsComponent* psc = e.get<PrimitiveSetsComponent>();
         if (!psc) continue;
+
+        const BlendMode blendMode = [&]() -> BlendMode {
+            const auto* ro = e.get<MeshRenderOptions>();
+            return ro ? ro->blendMode : BlendMode::Opaque;
+        }();
 
         std::unordered_map<int, uint64_t> bytesPerType;
         for (const auto& ps : psc->sets)
@@ -114,7 +140,7 @@ void BatchingSystem::BuildAll(
 
         for (auto& [typeInt, bytes] : bytesPerType) {
             auto type = static_cast<PrimitiveType>(typeInt);
-            flecs::entity page = FindOrCreatePage(world, type, bytes);
+            flecs::entity page = FindOrCreatePage(world, type, blendMode, bytes);
             e.add<BelongsToPage>(page);
 
             auto* meta = page.get_mut<PageMetaComponent>();

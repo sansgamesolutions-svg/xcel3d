@@ -4,6 +4,7 @@
 #include "Kernel/ScalarTable.h"
 #include "Kernel/ColorTable.h"
 #include "Kernel/TessellationStrategy.h"
+#include "Renderer/RenderOptions.h"
 #include <glm/glm.hpp>
 #include <cstdint>
 #include <memory>
@@ -68,6 +69,7 @@ struct BoundingBoxComponent {
 // Metadata attached to page entities created by BatchingSystem.
 struct PageMetaComponent {
     PrimitiveType primitiveType;
+    BlendMode     blendMode     = BlendMode::Opaque; // key field for ByPrimitiveTypeAndBlend strategy
     uint64_t      capacityBytes = 0;
     uint64_t      usedBytes     = 0;
     // World-space AABB of all mesh entities assigned to this page.

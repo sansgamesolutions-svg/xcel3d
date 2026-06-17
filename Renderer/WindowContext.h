@@ -9,6 +9,8 @@
 #include "Renderer/RenderGraph.h"
 #include "Renderer/GpuBuffer.h"
 #include "Renderer/PassOptions.h"
+#include "Renderer/RenderOptions.h"
+#include "Renderer/HardwareCaps.h"
 #include "Renderer/World.h"
 #include "Renderer/Manipulator/ManipulatorController.h"
 #include "Common/ThreadPool.h"
@@ -34,6 +36,7 @@ public:
     ManipulatorController& GetManipulators();
 
     void SetPassOptions(const PassOptions& opts);
+    void SetGlobalRenderOptions(const GlobalRenderOptions& opts);
     void SetShaderDir(std::filesystem::path dir);
 
     // Upload RGBA8 pixels from CPU; returns opaque texture index for use in MaterialComponent.
@@ -93,8 +96,10 @@ private:
     Camera            m_camera;
     RenderGraph       m_renderGraph;
     GpuBuffer         m_defaultInstanceBuffer;
-    PassOptions       m_passOptions;
-    bool              m_graphDirty         = false;
+    HardwareCaps        m_hwCaps;
+    GlobalRenderOptions m_globalOptions;
+    EffectiveCaps       m_effectiveCaps;
+    bool                m_graphDirty         = false;
     bool              m_framebufferResized = false;
 
     // Scene + systems

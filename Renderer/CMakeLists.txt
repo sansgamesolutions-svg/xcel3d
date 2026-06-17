@@ -67,6 +67,7 @@ add_library(XcelRenderer STATIC
     Source/WindowContext.cpp
     Source/VulkanContext.cpp
     Source/World.cpp
+    Source/RenderOptions.cpp
     # Manipulators
     Source/Manipulator/ManipulatorGeometry.cpp
     Source/Manipulator/ViewManipulator.cpp
