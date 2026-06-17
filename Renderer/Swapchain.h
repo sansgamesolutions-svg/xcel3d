@@ -32,6 +32,9 @@ public:
     uint32_t       ImageCount()                  const;
     VkFramebuffer  Framebuffer(uint32_t i)        const;
     VkFramebuffer  OverlayFramebuffer(uint32_t i) const;
+    VkImageView    ImageView(uint32_t i)          const { return m_imageViews[i]; }
+    VkImageView    DepthImageView()               const { return m_depthImageView; }
+    VkFormat       DepthFormat()                  const { return m_depthFormat; }
 
     static SwapchainSupportDetails QuerySupport(VkPhysicalDevice dev, VkSurfaceKHR surface);
 

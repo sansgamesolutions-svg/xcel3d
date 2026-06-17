@@ -92,10 +92,11 @@ flecs::entity BatchingSystem::FindOrCreatePage(
     {
         switch (blendMode)
         {
-        case BlendMode::AlphaBlend:    name += "_alpha";    break;
-        case BlendMode::Additive:      name += "_additive"; break;
-        case BlendMode::Premultiplied: name += "_premult";  break;
-        default:                                            break;
+        case BlendMode::AlphaBlend:         name += "_alpha";    break;
+        case BlendMode::Additive:           name += "_additive"; break;
+        case BlendMode::Premultiplied:      name += "_premult";  break;
+        case BlendMode::WeightedBlendedOIT: name += "_oit";      break;
+        default:                                                 break;
         }
     }
     name += "_" + std::to_string(m_pageCount++);

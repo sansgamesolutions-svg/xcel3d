@@ -7,13 +7,14 @@ namespace xcel {
 
 class GpuBuffer;
 
-// Per-draw-call material delivered as a push constant (20 bytes, fragment stage).
+// Per-draw-call material delivered as a push constant (fragment stage).
 // textureIndex = 0xFFFFFFFF means no texture; shader falls back to per-vertex color.
 struct MaterialData {
     float    ambientFactor  = 0.15f;
     float    diffuseFactor  = 1.0f;
     float    specularFactor = 0.4f;
     float    shininess      = 32.0f;
+    float    alpha          = 1.0f;
     uint32_t textureIndex   = 0xFFFFFFFFu;
 };
 

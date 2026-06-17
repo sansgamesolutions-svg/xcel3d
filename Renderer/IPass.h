@@ -10,9 +10,12 @@
 
 namespace xcel {
 
+class Swapchain;
+
 struct PassContext
 {
     uint32_t               frameIndex              = 0;
+    uint32_t               imageIndex              = 0;
     VkFramebuffer          swapchainFramebuffer    = VK_NULL_HANDLE;
     VkFramebuffer          overlayFramebuffer      = VK_NULL_HANDLE;
     VkExtent2D             extent                  = {};
@@ -50,6 +53,8 @@ struct BuildPassInfo
     VkFormat              depthFormat       = VK_FORMAT_D32_SFLOAT;
     // Reserved for future MSAA wiring; passes read this when upgrading sample counts.
     EffectiveCaps         effectiveCaps     = {};
+    // Non-owning; lets passes fetch per-image swapchain color/depth views (e.g. OitPass).
+    Swapchain*            swapchain         = nullptr;
 };
 
 class IPass

@@ -11,7 +11,9 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec3 fragColor;
 layout(location = 3) in vec2 fragTexCoord;
 
-layout(location = 0) out vec4 outColor;
+// Weighted-blended OIT accumulation targets (McGuire & Bavoil, JCGT 2013).
+layout(location = 0) out vec4  outAccum;
+layout(location = 1) out float outReveal;
 
 void main() {
     if (dot(ubo.sectionPlane.xyz, ubo.sectionPlane.xyz) > 0.01 &&
@@ -26,9 +28,16 @@ void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(ubo.viewPos - fragPos);
 
-    vec3 result = BlinnPhong(albedo, N, V, fragPos, ubo.lightCount, ubo.lights,
+    vec3 shaded = BlinnPhong(albedo, N, V, fragPos, ubo.lightCount, ubo.lights,
                               mat.ambientFactor, mat.diffuseFactor,
                               mat.specularFactor, mat.shininess);
 
-    outColor = vec4(result, mat.alpha);
+    float a = mat.alpha;
+
+    // Depth-weighted contribution: fragments closer to the camera dominate the
+    // average. Branchless form of the weighting function from the paper.
+    float w = a * max(1e-2, 3e3 * pow(1.0 - gl_FragCoord.z * 0.99, 3.0));
+
+    outAccum  = vec4(shaded * a, a) * w;
+    outReveal = a;
 }

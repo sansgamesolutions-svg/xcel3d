@@ -22,6 +22,19 @@ struct PipelineConfig
     VkBlendFactor   dstColorFactor   = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     VkBlendFactor   srcAlphaFactor   = VK_BLEND_FACTOR_ONE;
     VkBlendFactor   dstAlphaFactor   = VK_BLEND_FACTOR_ZERO;
+
+    // Multi-render-target blend states, one per color attachment, used verbatim.
+    // Empty (default) keeps the single-attachment path driven by the fields above.
+    // Requires VkPhysicalDeviceFeatures::independentBlend when entries differ.
+    std::vector<VkPipelineColorBlendAttachmentState> mrtBlendAttachments;
+
+    // True for pipelines that take no vertex buffers (e.g. a fullscreen-triangle
+    // composite pass driven entirely by gl_VertexIndex).
+    bool            noVertexInput    = false;
+
+    // Subpass index within renderPass this pipeline is bound to (e.g. OitPass's
+    // composite pipeline runs in subpass 1, after the accumulate subpass).
+    uint32_t        subpass          = 0;
 };
 
 class Pipeline

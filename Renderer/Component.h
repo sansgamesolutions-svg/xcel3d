@@ -106,6 +106,7 @@ struct MaterialComponent {
     float    diffuseFactor  = 1.0f;
     float    specularFactor = 0.4f;
     float    shininess      = 32.0f;
+    float    alpha          = 1.0f;
     uint32_t textureIndex   = 0xFFFFFFFFu;
 };
 
