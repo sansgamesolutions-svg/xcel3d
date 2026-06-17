@@ -1,9 +1,10 @@
 #pragma once
 #include "Renderer/DeviceContext.h"
 #include "Renderer/DrawCall.h"
-#include "Renderer/RenderOptions.h"
+#include "Renderer/RenderGraphConfig.h"
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
+#include <optional>
 #include <span>
 #include <string>
 #include <cstdint>
@@ -52,9 +53,11 @@ struct BuildPassInfo
     VkFormat              colorFormat       = VK_FORMAT_B8G8R8A8_SRGB;
     VkFormat              depthFormat       = VK_FORMAT_D32_SFLOAT;
     // Reserved for future MSAA wiring; passes read this when upgrading sample counts.
-    EffectiveCaps         effectiveCaps     = {};
+    EffectiveCaps                    effectiveCaps = {};
     // Non-owning; lets passes fetch per-image swapchain color/depth views (e.g. OitPass).
-    Swapchain*            swapchain         = nullptr;
+    Swapchain*                       swapchain     = nullptr;
+    // Pipeline list for ForwardRenderPass; empty = use RenderGraphConfig::Default().
+    std::optional<ForwardPassConfig> forwardConfig;
 };
 
 class IPass

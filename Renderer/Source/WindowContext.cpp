@@ -220,16 +220,23 @@ void WindowContext::InitVulkan()
     m_descriptors.Create(dev);
     m_textures.Create(dev);
 
-    m_renderGraph = RenderGraphBuilder{}
-        .SetOptions(m_globalOptions)
-        .SetEffectiveCaps(m_effectiveCaps)
-        .SetSwapchain(m_swapchain)
-        .SetSurface(m_vulkan.Surface())
-        .SetWindow(*m_widget)
-        .SetDescriptors(m_descriptors)
-        .SetTextures(m_textures)
-        .SetShaderDir(m_shaderDir.string())
-        .Build(dev);
+    {
+        auto builder = RenderGraphBuilder{}
+            .SetOptions(m_globalOptions)
+            .SetEffectiveCaps(m_effectiveCaps)
+            .SetSwapchain(m_swapchain)
+            .SetSurface(m_vulkan.Surface())
+            .SetWindow(*m_widget)
+            .SetDescriptors(m_descriptors)
+            .SetTextures(m_textures)
+            .SetShaderDir(m_shaderDir.string());
+
+        const auto cfgPath = m_shaderDir / "render_graph.json";
+        if (std::filesystem::exists(cfgPath))
+            builder.LoadFromJson(cfgPath);
+
+        m_renderGraph = builder.Build(dev);
+    }
 
     m_manipulators.Build(dev);
 
@@ -352,7 +359,8 @@ void WindowContext::DrawFrame()
     if (m_graphDirty) {
         vkDeviceWaitIdle(dev.Device());
         m_renderGraph.Destroy(dev.Device());
-        m_renderGraph = RenderGraphBuilder{}
+
+        auto builder = RenderGraphBuilder{}
             .SetOptions(m_globalOptions)
             .SetEffectiveCaps(m_effectiveCaps)
             .SetSwapchain(m_swapchain)
@@ -360,9 +368,14 @@ void WindowContext::DrawFrame()
             .SetWindow(*m_widget)
             .SetDescriptors(m_descriptors)
             .SetTextures(m_textures)
-            .SetShaderDir(m_shaderDir.string())
-            .Build(dev);
-        m_graphDirty = false;
+            .SetShaderDir(m_shaderDir.string());
+
+        const auto cfgPath = m_shaderDir / "render_graph.json";
+        if (std::filesystem::exists(cfgPath))
+            builder.LoadFromJson(cfgPath);
+
+        m_renderGraph = builder.Build(dev);
+        m_graphDirty  = false;
     }
 
     m_renderGraph.WaitForCurrentFrame(dev.Device());

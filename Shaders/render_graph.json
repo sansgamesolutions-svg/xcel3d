@@ -1,0 +1,58 @@
+{
+  "passes": [
+    { "type": "frustum_cull", "enabled": false },
+    {
+      "type": "forward_lit",
+      "clear_color": [0.15, 0.15, 0.15, 1.0],
+      "pipelines": [
+        {
+          "name": "opaque",
+          "vert": "mesh.vert.spv",
+          "frag": "mesh.frag.spv",
+          "blend_mode": "opaque",
+          "render_layer": "opaque",
+          "depth_test": true,
+          "depth_write": true,
+          "cull_mode": "back"
+        },
+        {
+          "name": "alpha_blend",
+          "vert": "mesh.vert.spv",
+          "frag": "mesh.frag.spv",
+          "blend_mode": "alpha_blend",
+          "render_layer": "transparent",
+          "depth_test": true,
+          "depth_write": false,
+          "src_color": "src_alpha",
+          "dst_color": "one_minus_src_alpha",
+          "src_alpha": "one",
+          "dst_alpha": "zero"
+        },
+        {
+          "name": "additive",
+          "vert": "mesh.vert.spv",
+          "frag": "mesh.frag.spv",
+          "blend_mode": "additive",
+          "render_layer": "transparent",
+          "depth_test": true,
+          "depth_write": false,
+          "src_color": "one",
+          "dst_color": "one"
+        },
+        {
+          "name": "premult",
+          "vert": "mesh.vert.spv",
+          "frag": "mesh.frag.spv",
+          "blend_mode": "premultiplied",
+          "render_layer": "transparent",
+          "depth_test": true,
+          "depth_write": false,
+          "src_color": "one",
+          "dst_color": "one_minus_src_alpha"
+        }
+      ]
+    },
+    { "type": "oit",         "enabled": true },
+    { "type": "manipulator", "enabled": true }
+  ]
+}
